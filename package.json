@@ -1,0 +1,18 @@
+{
+  "name": "toon-shooter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A toon-style third-person shooter built with Three.js. Multiplayer planned.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

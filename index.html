@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Toon Shooter</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div id="crosshair">+</div>
+      <div id="hud-top-left">
+        <div class="stat"><span class="label">HP</span>
+          <div class="bar"><div id="hp-fill"></div></div>
+        </div>
+      </div>
+      <div id="hud-top-right">
+        <div class="stat-num"><span class="label">SCORE</span> <span id="score">0</span></div>
+        <div class="stat-num"><span class="label">WAVE</span> <span id="wave">1</span></div>
+      </div>
+      <div id="hud-bottom-right">
+        <span id="ammo">12</span><span class="ammo-sep">/</span><span id="ammo-max">12</span>
+        <div id="reload-hint" class="hidden">RELOADING…</div>
+      </div>
+    </div>
+
+    <!-- Start / pause / game-over overlay -->
+    <div id="overlay">
+      <div class="panel">
+        <h1>TOON&nbsp;SHOOTER</h1>
+        <p id="overlay-msg">Survive the waves. Click to lock your mouse and shoot.</p>
+        <button id="start-btn">PLAY</button>
+        <ul class="controls">
+          <li><b>WASD</b> move</li>
+          <li><b>Mouse</b> aim</li>
+          <li><b>Left Click</b> shoot</li>
+          <li><b>Shift</b> sprint</li>
+          <li><b>Space</b> jump</li>
+          <li><b>R</b> reload</li>
+          <li><b>Esc</b> pause</li>
+        </ul>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
