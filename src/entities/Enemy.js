@@ -2,21 +2,29 @@ import * as THREE from 'three'
 import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 
 const TMP = new THREE.Vector3()
+const MUZZLE = new THREE.Vector3()
+const TARGET = new THREE.Vector3()
 
-// A chasing enemy: walks toward the player and attacks in range. Uses the Toon
-// Shooter Game Kit's animated enemy model when provided, with a placeholder
-// capsule + health bar otherwise.
+// An enemy that SHOOTS at range and only punches in close combat. Uses the Toon
+// Shooter Game Kit's animated enemy model (no visible capsule placeholder).
 export class Enemy {
-  constructor({ world, position, hp = 100, speed = 3.5, damage = 8, model = null }) {
+  constructor({ world, position, hp = 100, speed = 3.5, damage = 8, model = null, fx = null }) {
     this.world = world
+    this.fx = fx // shared combat FX (beam/impact) — usually the Weapons instance
     this.maxHp = hp
     this.hp = hp
     this.speed = speed
-    this.damage = damage
+    this.meleeDamage = damage
+    this.shootDamage = Math.max(3, Math.round(damage * 0.6))
     this.alive = true
-    this.attackRange = 2.2
+
+    this.meleeRange = 2.4
+    this.preferredRange = 13 // tries to close to here, then shoots
     this.attackCooldown = 0
-    this.attackInterval = 1.2
+    this.attackInterval = 1.1
+    this.shootCooldown = 0.6 + Math.random() * 1.2 // desync volleys
+    this.shootInterval = 1.4
+    this.shootAccuracy = 0.55 // chance a shot connects
     this.targetHeight = 1.8
     this.dying = false
     this.removeTimer = 0
@@ -24,21 +32,13 @@ export class Enemy {
     this.group = new THREE.Group()
     this.group.position.copy(position)
 
-    // Invisible capsule that the bullet raycaster always tests against (reliable
-    // hits regardless of the animated mesh's current pose).
+    // Invisible capsule the bullet raycaster tests against (reliable hits
+    // regardless of the animated mesh pose). Not a visible character.
     const hitMat = new THREE.MeshBasicMaterial({ visible: false })
     this.hitMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.0, 4, 8), hitMat)
     this.hitMesh.position.y = 1.0
     this.hitMesh.userData.enemy = this
     this.group.add(this.hitMesh)
-
-    // Placeholder visual (replaced by model).
-    const mat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.6 })
-    this.placeholder = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.0, 6, 12), mat)
-    this.placeholder.position.y = 1.0
-    this.placeholder.castShadow = true
-    this.group.add(this.placeholder)
-    this.flashMat = mat
 
     // Health bar (billboard).
     this.hpBarBg = makeBar(0x000000, 1)
@@ -54,13 +54,10 @@ export class Enemy {
 
   setModel(scene, clips) {
     if (!scene) return
-    this.group.remove(this.placeholder)
     scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
     normalizeModel(scene, this.targetHeight)
     this.group.add(scene)
     this.model = scene
-    this.flashMat = null
-
     if (clips && clips.length) {
       this.animator = new CharacterAnimator(scene, clips)
       this.animator.play('Idle', { fade: 0 })
@@ -71,16 +68,9 @@ export class Enemy {
   takeHit(dmg) {
     if (!this.alive) return false
     this.hp = Math.max(0, this.hp - dmg)
-
-    if (this.flashMat) {
-      this.flashMat.emissive = new THREE.Color(0xffffff)
-      this.flashMat.emissiveIntensity = 0.8
-      this._flash = 0.08
-    }
     const ratio = this.hp / this.maxHp
     this.hpBar.scale.x = Math.max(0.001, ratio)
     this.hpBar.position.x = -(1 - ratio) * 0.5
-
     if (this.hp <= 0) {
       this._die()
       return true
@@ -95,11 +85,8 @@ export class Enemy {
     this.removeTimer = 1.6
     this.hpBar.visible = false
     this.hpBarBg.visible = false
-    if (this.animator?.has('Death')) {
-      this.animator.play('Death', { once: true, fade: 0.1 })
-    } else {
-      this.removeTimer = 0 // no death anim -> remove immediately
-    }
+    if (this.animator?.has('Death')) this.animator.play('Death', { once: true, fade: 0.1 })
+    else this.removeTimer = 0
   }
 
   // Returns true when fully finished (ready to be removed by the spawner).
@@ -114,47 +101,68 @@ export class Enemy {
     TMP.subVectors(player.position, this.group.position)
     TMP.y = 0
     const dist = TMP.length()
+    TMP.normalize()
+    this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
 
-    if (dist > this.attackRange) {
-      TMP.normalize()
-      this.group.position.addScaledVector(TMP, this.speed * dt)
-      this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
-      this._setClip(this.speed > 4 && this.animator?.has('Run') ? 'Run' : 'Walk')
-      this.attacking = false
-    } else {
-      // Face the player and attack on cooldown.
-      this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
-      this.attackCooldown -= dt
+    if (dist <= this.meleeRange) {
+      // Close combat: punch only.
       this._setClip('Idle')
+      this.attackCooldown -= dt
       if (this.attackCooldown <= 0 && player.alive) {
-        player.takeDamage(this.damage)
+        player.takeDamage(this.meleeDamage)
         this.attackCooldown = this.attackInterval
         if (this.animator?.has('Punch')) this.animator.playOnceThen('Punch', 'Idle')
+      }
+    } else {
+      // Ranged: advance toward preferred range, then shoot.
+      const advancing = dist > this.preferredRange
+      if (advancing) {
+        this.group.position.addScaledVector(TMP, this.speed * dt)
+        this._setClip(this.speed > 4 && this.animator?.has('Run_Shoot') ? 'Run_Shoot' : 'Walk')
+      } else {
+        this._setClip('Idle_Shoot')
+      }
+      this.shootCooldown -= dt
+      if (this.shootCooldown <= 0 && player.alive) {
+        this._shoot(player)
+        this.shootCooldown = this.shootInterval * (0.8 + Math.random() * 0.5)
       }
     }
 
     this.world.clampToArena(this.group.position)
-
-    if (this._flash > 0) {
-      this._flash -= dt
-      if (this._flash <= 0 && this.flashMat) this.flashMat.emissiveIntensity = 0
-    }
-
     if (camera) {
       this.hpBar.quaternion.copy(camera.quaternion)
       this.hpBarBg.quaternion.copy(camera.quaternion)
     }
-
     this.animator?.update(dt)
     return false
   }
 
+  _shoot(player) {
+    MUZZLE.set(this.group.position.x, this.group.position.y + 1.3, this.group.position.z)
+    MUZZLE.addScaledVector(TMP, 0.6) // a little in front of the chest
+    TARGET.set(player.position.x, player.position.y + 1.2, player.position.z)
+    // Enemy tracer (reddish).
+    this.fx?.beam(MUZZLE, TARGET, 0xff6b4a, 0.05)
+    this.fx?.flash(MUZZLE, 0xff8a5a)
+    if (Math.random() < this.shootAccuracy) {
+      player.takeDamage(this.shootDamage)
+    }
+    if (this.animator?.has('Idle_Shoot') && !this._isRunShooting()) {
+      // a brief shoot pose pulse if currently idle
+    }
+  }
+
+  _isRunShooting() {
+    return this.animator?.current === this.animator?.actions['Run_Shoot']
+  }
+
   _setClip(name) {
     if (!this.animator) return
-    // Don't stomp a one-shot (punch/hitreact) that is currently playing once.
     const cur = this.animator.current
     if (cur && cur.loop === THREE.LoopOnce && cur.isRunning()) return
-    if (this.animator.has(name)) this.animator.play(name, { fade: 0.18 })
+    const pick = this.animator.has(name) ? name : 'Idle'
+    this.animator.play(pick, { fade: 0.18 })
   }
 
   dispose() {

@@ -69,7 +69,7 @@ export class Game {
     this._buildWorld()
     this.player = new Player({ world: this.world, input: this.input, camera: this.camera })
     this.weapons = new Weapons({ world: this.world })
-    this.spawner = new Spawner({ world: this.world, assets: this.assets })
+    this.spawner = new Spawner({ world: this.world, assets: this.assets, weapons: this.weapons })
     this.score = 0
 
     // HUD hooks
@@ -152,12 +152,25 @@ export class Game {
     const dt = Math.min(0.05, this.clock.getDelta())
 
     // Shooting (hold to fire; Weapons enforces fire rate).
+    let firedThisFrame = false
     if (this.input.mouse.down && this.player.alive) {
       const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
-      this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle)
+      const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle)
+      if (res.fired) {
+        firedThisFrame = true
+        if (res.killed) this.hud.hitMarker(true)
+        else if (res.hit) this.hud.hitMarker(false)
+      }
     }
 
     this.player.update(dt)
+
+    // Fortnite-style dynamic reticle: bloom out when moving/firing/airborne.
+    let spread = 0
+    if (this.player.moving) spread += this.player.sprinting ? 16 : 9
+    if (!this.player.onGround) spread += 10
+    if (firedThisFrame || this.weapons.reloading) spread += 12
+    this.hud.setCrosshairSpread(spread)
     this.weapons.update(dt)
     this.spawner.update(dt, this.player, this.camera)
 

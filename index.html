@@ -10,7 +10,17 @@
 
     <!-- HUD -->
     <div id="hud" class="hidden">
-      <div id="crosshair">+</div>
+      <!-- Fortnite-style dynamic reticle: 4 marks + center dot that bloom out,
+           plus an X hitmarker that flashes when you tag an enemy. -->
+      <div id="crosshair">
+        <span class="ch-dot"></span>
+        <span class="ch-line ch-top"></span>
+        <span class="ch-line ch-bottom"></span>
+        <span class="ch-line ch-left"></span>
+        <span class="ch-line ch-right"></span>
+        <span class="ch-hit ch-hit-a"></span>
+        <span class="ch-hit ch-hit-b"></span>
+      </div>
       <div id="hud-top-left">
         <div class="stat"><span class="label">HP</span>
           <div class="bar"><div id="hp-fill"></div></div>

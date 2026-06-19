@@ -20,12 +20,8 @@ export class Player {
     this.modelPivot = new THREE.Group()
     this.group.add(this.modelPivot)
 
-    // Placeholder (used until the GLTF model loads).
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3da9fc, roughness: 0.7 })
-    this.placeholder = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.0, 6, 12), bodyMat)
-    this.placeholder.position.y = 1.0
-    this.placeholder.castShadow = true
-    this.modelPivot.add(this.placeholder)
+    // No visible placeholder — the player appears once the GLTF model loads
+    // (a fraction of a second). Avoids any capsule stand-in.
 
     // State
     this.position = this.group.position
@@ -62,7 +58,6 @@ export class Player {
   // Install the animated GLTF character (scene + clips) and attach a gun model.
   setModel(scene, clips, gunScene) {
     if (!scene) return
-    this.modelPivot.remove(this.placeholder)
     scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
     normalizeModel(scene, this.targetHeight)
     this.modelPivot.add(scene)

@@ -4,9 +4,10 @@ import { Enemy } from '../entities/Enemy.js'
 // Wave-based spawner. Each wave spawns more/tougher enemies. When all are dead,
 // a short intermission then the next wave begins.
 export class Spawner {
-  constructor({ world, assets }) {
+  constructor({ world, assets, weapons }) {
     this.world = world
     this.assets = assets
+    this.weapons = weapons // shared combat FX for enemy tracers
     this.enemies = []
     this.wave = 0
     this.intermission = 0
@@ -41,7 +42,9 @@ export class Spawner {
     // Fresh skeleton-safe clone per enemy (async load is cached after first).
     this.pending += 1
     const model = this.enemyModelPath ? await this.assets.loadModel(this.enemyModelPath) : null
-    this.enemies.push(new Enemy({ world: this.world, position: pos, hp, speed, damage, model }))
+    this.enemies.push(new Enemy({
+      world: this.world, position: pos, hp, speed, damage, model, fx: this.weapons,
+    }))
     this.pending -= 1
   }
 

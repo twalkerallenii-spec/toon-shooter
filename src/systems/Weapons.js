@@ -38,8 +38,9 @@ export class Weapons {
   // aim). `muzzlePos` = world Vector3 the visible tracer is drawn from.
   // `targets` = array of Enemy with .alive, .takeHit(dmg), .hitMesh.
   tryFire(aim, targets, muzzlePos) {
-    if (this._cooldown > 0 || this._reloading > 0) return false
-    if (this.ammo <= 0) { this.startReload(); return false }
+    const NONE = { fired: false, hit: false, killed: false }
+    if (this._cooldown > 0 || this._reloading > 0) return NONE
+    if (this.ammo <= 0) { this.startReload(); return NONE }
 
     this.ammo -= 1
     this._cooldown = 1 / this.fireRate
@@ -64,61 +65,61 @@ export class Weapons {
     const hits = this.raycaster.intersectObjects(meshes, true)
     let endPoint = aim.origin.clone().addScaledVector(dir, this.range)
     let killed = false
+    let hitEnemy = false
 
     if (hits.length) {
       const hit = hits[0]
       endPoint = hit.point.clone()
       const enemy = targets.find((t) => t.hitMesh === hit.object)
       if (enemy) {
-        const dead = enemy.takeHit(this.damage)
-        killed = dead
-        this._spawnImpact(hit.point, 0xff5555)
+        killed = enemy.takeHit(this.damage)
+        hitEnemy = true
+        this.impact(hit.point, 0xff5555)
       } else {
-        this._spawnImpact(hit.point, 0xffe08a)
+        this.impact(hit.point, 0xffe08a)
       }
     }
 
     // Visible tracer beam from the gun muzzle to the impact point.
     const start = muzzlePos ? muzzlePos.clone() : aim.origin.clone().addScaledVector(dir, 1.2)
-    this._spawnBeam(start, endPoint)
-    this._spawnMuzzleFlash(start)
+    this.beam(start, endPoint, 0xfff2a8)
+    this.flash(start, 0xffd24a)
     if (this.ammo <= 0) this.startReload()
 
-    return killed
+    return { fired: true, hit: hitEnemy, killed }
   }
 
+  // ---- Public combat FX (used by the player weapon and by enemies) --------
+
   // A glowing cylinder stretched between two points (line width is unreliable in
-  // WebGL, so we use geometry for a tracer that's actually visible).
-  _spawnBeam(a, b) {
+  // WebGL, so geometry gives a tracer that's actually visible).
+  beam(a, b, color = 0xfff2a8, life = 0.07) {
     const dir = new THREE.Vector3().subVectors(b, a)
     const len = dir.length()
     if (len < 0.01) return
     const geo = new THREE.CylinderGeometry(0.035, 0.035, len, 6, 1, true)
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xfff2a8, transparent: true, depthWrite: false,
-    })
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false })
     const beam = new THREE.Mesh(geo, mat)
     beam.position.copy(a).addScaledVector(dir, 0.5)
-    // Orient the cylinder (default +Y) along the shot direction.
-    beam.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0), dir.clone().normalize()
-    )
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize())
     this.scene.add(beam)
-    this.effects.push({ mesh: beam, life: 0.07, maxLife: 0.07, fade: true })
+    this.effects.push({ mesh: beam, life, maxLife: life, fade: true })
   }
 
-  _spawnMuzzleFlash(pos) {
+  flash(pos, color = 0xffd24a) {
+    this._spawnMuzzleFlash(pos, color)
+  }
+
+  _spawnMuzzleFlash(pos, color = 0xffd24a) {
     const geo = new THREE.SphereGeometry(0.22, 8, 8)
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffd24a, transparent: true, depthWrite: false,
-    })
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false })
     const flash = new THREE.Mesh(geo, mat)
     flash.position.copy(pos)
     this.scene.add(flash)
     this.effects.push({ mesh: flash, life: 0.06, maxLife: 0.06, fade: true, grow: true })
   }
 
-  _spawnImpact(point, color) {
+  impact(point, color = 0xffe08a) {
     const geo = new THREE.SphereGeometry(0.18, 8, 8)
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true })
     const m = new THREE.Mesh(geo, mat)

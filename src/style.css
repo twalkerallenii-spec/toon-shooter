@@ -23,12 +23,45 @@ body {
 /* ---------- HUD ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; }
 
+/* ---- Fortnite-style dynamic reticle ---- */
 #crosshair {
   position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 26px; font-weight: bold;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+  width: 0; height: 0;
+  --gap: 7px;            /* bloom: distance of each mark from center */
+  --len: 9px;            /* mark length */
+  --thick: 3px;          /* mark thickness */
+  --col: rgba(255, 255, 255, 0.92);
+}
+#crosshair .ch-dot {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%;
+  background: var(--col); transform: translate(-50%, -50%);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+#crosshair .ch-line {
+  position: absolute; background: var(--col);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  transition: transform 0.07s ease-out;
+}
+.ch-top, .ch-bottom { width: var(--thick); height: var(--len); }
+.ch-left, .ch-right { width: var(--len); height: var(--thick); }
+.ch-top    { transform: translate(-50%, calc(-100% - var(--gap))); }
+.ch-bottom { transform: translate(-50%, var(--gap)); }
+.ch-left   { transform: translate(calc(-100% - var(--gap)), -50%); }
+.ch-right  { transform: translate(var(--gap), -50%); }
+
+/* Hitmarker: two diagonal bars forming an X that flash on hit. */
+#crosshair .ch-hit {
+  position: absolute; width: 14px; height: 3px; border-radius: 2px;
+  background: #fff; opacity: 0;
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+#crosshair .ch-hit-b { transform: translate(-50%, -50%) rotate(-45deg); }
+#crosshair.hit .ch-hit { animation: hitmark 0.22s ease-out; }
+#crosshair.kill .ch-hit { background: #ff4d4d; animation: hitmark 0.32s ease-out; }
+@keyframes hitmark {
+  0%   { opacity: 1; width: 8px; }
+  100% { opacity: 0; width: 18px; }
 }
 
 #hud-top-left { position: absolute; top: 20px; left: 22px; }

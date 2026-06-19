@@ -3,6 +3,7 @@ export class HUD {
   constructor() {
     this.el = {
       hud: document.getElementById('hud'),
+      crosshair: document.getElementById('crosshair'),
       hpFill: document.getElementById('hp-fill'),
       score: document.getElementById('score'),
       wave: document.getElementById('wave'),
@@ -34,6 +35,25 @@ export class HUD {
 
   setReloading(on) {
     this.el.reloadHint.classList.toggle('hidden', !on)
+  }
+
+  // Dynamic reticle bloom: 0 = tight, larger = wider gap. Smoothed toward target.
+  setCrosshairSpread(extra) {
+    const base = 7
+    this._spread = (this._spread ?? base)
+    const target = base + Math.max(0, extra)
+    this._spread += (target - this._spread) * 0.35 // ease toward target
+    this.el.crosshair.style.setProperty('--gap', `${this._spread.toFixed(1)}px`)
+  }
+
+  // Flash the X hitmarker. isKill makes it red + a touch longer.
+  hitMarker(isKill) {
+    const ch = this.el.crosshair
+    const cls = isKill ? 'kill' : 'hit'
+    ch.classList.remove('hit', 'kill')
+    // Force reflow so the animation restarts even on rapid consecutive hits.
+    void ch.offsetWidth
+    ch.classList.add(cls)
   }
 
   showOverlay(msg, buttonLabel = 'PLAY') {
