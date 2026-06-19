@@ -116,7 +116,7 @@ body {
 #weapon-list .wpn.active b { color: var(--accent); }
 
 /* Mode selector (co-op / deathmatch) */
-.mode-options { display: flex; gap: 8px; }
+.mode-options { display: flex; gap: 8px; flex-wrap: wrap; }
 .mode-btn {
   flex: 1; font: inherit; font-size: 13px; font-weight: 700;
   color: rgba(255, 255, 255, 0.7); cursor: pointer;

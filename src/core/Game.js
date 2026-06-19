@@ -236,12 +236,13 @@ export class Game {
     this.net = new Net({
       url, name, room,
       handlers: {
-        onWelcome: (id, peers) => {
+        onWelcome: (id, peers, team) => {
           status.textContent = ''
+          this.myTeam = team
           this.peerNames.set(id, this._selfName)
           this.kills = 0; this.deaths = 0
           this.hud.setScore('0/0')
-          for (const peer of peers) this._addRemote(peer.id, peer.name, peer.p)
+          for (const peer of peers) this._addRemote(peer.id, peer.name, peer.p, peer.team)
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
           this.hud.show()
@@ -249,7 +250,7 @@ export class Game {
           this.clock.getDelta()
           this._loop()
         },
-        onPeerJoin: (id, pname) => this._addRemote(id, pname),
+        onPeerJoin: (id, pname, team) => this._addRemote(id, pname, null, team),
         onPeerLeave: (id) => {
           this.remotePlayers.get(id)?.dispose()
           this.remotePlayers.delete(id)
@@ -274,12 +275,20 @@ export class Game {
     this._selfName = name
   }
 
-  _addRemote(id, name, state) {
+  _addRemote(id, name, state, team) {
     if (this.remotePlayers.has(id)) return
     const rp = new RemotePlayer({ world: this.world, assets: this.assets, name, id })
+    rp.team = team
     if (state) rp.setState(state)
+    rp.setTeamColor(this._relationTo(team))
     this.remotePlayers.set(id, rp)
     this.peerNames?.set(id, name)
+  }
+
+  // ally / enemy / null — teams only matter in Team Deathmatch.
+  _relationTo(team) {
+    if (this.onlineMode !== 'team' || !team || !this.myTeam) return null
+    return team === this.myTeam ? 'ally' : 'enemy'
   }
 
   _handleMpDeath() {
@@ -385,8 +394,13 @@ export class Game {
         if (res.killed) { this.hud.hitMarker(true); this.audio.kill() }
         else if (res.hit) { this.hud.hitMarker(false); this.audio.hit() }
         if (res.playerHit != null && this.net) {
-          this.net.sendHit(res.playerHit, this.weapons.def.damage)
-          this.hud.hitMarker(false); this.audio.hit()
+          // Friendly fire off: don't damage teammates in Team Deathmatch.
+          const victim = this.remotePlayers.get(res.playerHit)
+          const friendly = this._relationTo(victim?.team) === 'ally'
+          if (!friendly) {
+            this.net.sendHit(res.playerHit, this.weapons.def.damage)
+            this.hud.hitMarker(false); this.audio.hit()
+          }
         }
         if (res.barrel) this.explode(res.barrel)
         // Broadcast the shot so other players see a tracer.

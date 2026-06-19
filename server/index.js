@@ -50,16 +50,21 @@ wss.on('connection', (ws) => {
       ws.id = id
       ws.room = roomName
       const name = (msg.name || `Player${id}`).slice(0, 16)
-      room.set(id, { ws, name, state: msg.p || null })
+
+      // Balance teams (used only by team modes; harmless otherwise).
+      let red = 0, blue = 0
+      for (const [, peer] of room) { if (peer.team === 'red') red++; else if (peer.team === 'blue') blue++ }
+      const team = red <= blue ? 'red' : 'blue'
+      room.set(id, { ws, name, state: msg.p || null, team })
 
       // Tell the newcomer who's already here.
       const peers = []
       for (const [pid, peer] of room) {
-        if (pid !== id) peers.push({ id: pid, name: peer.name, p: peer.state })
+        if (pid !== id) peers.push({ id: pid, name: peer.name, p: peer.state, team: peer.team })
       }
-      send(ws, { t: 'welcome', id, peers })
-      broadcast(room, { t: 'peerJoin', id, name }, id)
-      console.log(`[+] ${name} (#${id}) joined "${roomName}" — ${room.size} in room`)
+      send(ws, { t: 'welcome', id, team, peers })
+      broadcast(room, { t: 'peerJoin', id, name, team }, id)
+      console.log(`[+] ${name} (#${id}, ${team}) joined "${roomName}" — ${room.size} in room`)
       return
     }
 

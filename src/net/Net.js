@@ -34,10 +34,11 @@ export class Net {
     switch (msg.t) {
       case 'welcome':
         this.id = msg.id
+        this.team = msg.team
         this.connected = true
-        this.handlers.onWelcome?.(msg.id, msg.peers || [])
+        this.handlers.onWelcome?.(msg.id, msg.peers || [], msg.team)
         break
-      case 'peerJoin': this.handlers.onPeerJoin?.(msg.id, msg.name); break
+      case 'peerJoin': this.handlers.onPeerJoin?.(msg.id, msg.name, msg.team); break
       case 'peerLeave': this.handlers.onPeerLeave?.(msg.id); break
       case 'state': this.handlers.onState?.(msg.id, msg.p); break
       case 'shoot': this.handlers.onShoot?.(msg.id, msg.from, msg.to); break

@@ -36,6 +36,17 @@ export class RemotePlayer {
     this.modelPivot = new THREE.Group()
     this.group.add(this.modelPivot)
     this.group.add(this.hitMesh)
+
+    // Team marker ring at the feet (hidden until a team is set).
+    this.teamRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.7, 0.08, 8, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    )
+    this.teamRing.rotation.x = Math.PI / 2
+    this.teamRing.position.y = 0.06
+    this.teamRing.visible = false
+    this.group.add(this.teamRing)
+
     world.scene.add(this.group)
 
     assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
@@ -48,6 +59,13 @@ export class RemotePlayer {
         this.animator.play('Idle', { fade: 0 })
       }
     })
+  }
+
+  // Show a team color ring: green if ally, red if enemy (null hides it).
+  setTeamColor(relation) {
+    if (!relation) { this.teamRing.visible = false; return }
+    this.teamRing.visible = true
+    this.teamRing.material.color.set(relation === 'ally' ? 0x4ade80 : 0xff5555)
   }
 
   setState(p) {
