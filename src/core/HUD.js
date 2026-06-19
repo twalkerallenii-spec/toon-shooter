@@ -14,6 +14,8 @@ export class HUD {
       weaponList: document.getElementById('weapon-list'),
       killfeed: document.getElementById('killfeed'),
       stormWarning: document.getElementById('storm-warning'),
+      voteToggle: document.getElementById('vote-toggle'),
+      votePanel: document.getElementById('vote-panel'),
       adsVignette: document.getElementById('ads-vignette'),
       overlay: document.getElementById('overlay'),
       overlayMsg: document.getElementById('overlay-msg'),
@@ -74,6 +76,19 @@ export class HUD {
   clearKillFeed() { this.el.killfeed.innerHTML = '' }
 
   setStorm(on) { this.el.stormWarning.classList.toggle('hidden', !on) }
+
+  showVoteToggle(on) {
+    this.el.voteToggle.classList.toggle('hidden', !on)
+    if (!on) this.el.votePanel.classList.add('hidden')
+  }
+  toggleVotePanel() { this.el.votePanel.classList.toggle('hidden') }
+  hideVotePanel() { this.el.votePanel.classList.add('hidden') }
+  setVotes(tally) {
+    for (const m of Object.keys(tally)) {
+      const el = this.el.votePanel.querySelector(`[data-c="${m}"]`)
+      if (el) el.textContent = tally[m]
+    }
+  }
 
   // Dynamic reticle bloom: 0 = tight, larger = wider gap. Smoothed toward target.
   setCrosshairSpread(extra) {

@@ -88,6 +88,12 @@ export class Game {
       if (this.state === STATE.MENU || this.state === STATE.DEAD) this.start(true)
     })
 
+    // Map voting (online): toggle panel + cast vote.
+    this.hud.el.voteToggle.addEventListener('click', () => this.hud.toggleVotePanel())
+    this.hud.el.votePanel.querySelectorAll('.vote-opt').forEach((b) => {
+      b.addEventListener('click', () => this.net?.sendVote(b.dataset.map))
+    })
+
     // Map selector buttons.
     document.querySelectorAll('.map-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -137,6 +143,9 @@ export class Game {
   _resetGameObjects() {
     // Fresh world each run so old enemies/effects are gone.
     this._buildWorld()
+    // The camera persists across matches; clear any old viewmodel/muzzle children
+    // so they don't accumulate (this caused a leftover "ghost" gun).
+    this.camera.clear()
     // Camera must be in the scene graph so the FPS viewmodel (its child) renders.
     this.world.scene.add(this.camera)
     this.particles = new Particles(this.world.scene)
@@ -220,6 +229,7 @@ export class Game {
     this.onlineMode = null // solo = co-op waves
     this.brMode = !!br      // solo battle royale = storm survival + enemies
     this._disconnect() // solo play: drop any prior connection
+    this.hud.showVoteToggle(false)
     this._resetGameObjects()
     this.state = STATE.PLAYING
     this.hud.hideOverlay()
@@ -256,6 +266,7 @@ export class Game {
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
           this.hud.show()
+          this.hud.showVoteToggle(true)
           if (!this.input.isTouch) this.input.requestLock()
           this.clock.getDelta()
           this._loop()
@@ -277,6 +288,8 @@ export class Game {
           this.player.takeDamage(dmg)
         },
         onKilled: (byId, victimId) => this._onKilled(byId, victimId),
+        onVotes: (tally) => this.hud.setVotes(tally),
+        onMapChange: (map) => this._applyMapChange(map),
         onError: () => { status.textContent = 'Connection failed. Is the server running?' },
         onClose: () => { if (this.state === STATE.PLAYING) status.textContent = 'Disconnected.' },
       },
@@ -328,6 +341,19 @@ export class Game {
     this._prevHp = this.player.hp
     this._deadHandled = false
     this._lastAttacker = null
+  }
+
+  // A vote finished: rebuild the world on the winning map without dropping the
+  // network connection; re-add the known peers.
+  _applyMapChange(map) {
+    this.selectedMap = map
+    this.hud.hideVotePanel()
+    this.hud.addKillFeed(`Map vote → ${map}`)
+    const peers = [...this.remotePlayers.values()].map((rp) => ({ id: rp.id, name: rp.name, team: rp.team }))
+    this._resetGameObjects() // rebuilds world/camera/player; leaves this.net intact
+    for (const p of peers) this._addRemote(p.id, p.name, null, p.team)
+    this.hud.showVoteToggle(true)
+    if (this.state === STATE.PLAYING && !this.input.isTouch) this.input.requestLock()
   }
 
   _onKilled(byId, victimId) {

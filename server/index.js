@@ -35,6 +35,36 @@ function broadcast(room, msg, exceptId) {
   }
 }
 
+const MAPS = ['arena', 'outpost', 'rooftops']
+
+// Map voting: tally per room, finalize when everyone has voted or after a timer.
+function handleVote(room, voterId, map) {
+  if (!MAPS.includes(map)) return
+  if (!room._votes) room._votes = new Map()
+  room._votes.set(voterId, map)
+
+  const tally = {}
+  for (const m of MAPS) tally[m] = 0
+  for (const m of room._votes.values()) tally[m]++
+  broadcast(room, { t: 'votes', tally })
+
+  if (!room._voteTimer) {
+    room._voteTimer = setTimeout(() => finalizeVote(room), 12000)
+  }
+  if (room._votes.size >= room.size) finalizeVote(room)
+}
+
+function finalizeVote(room) {
+  if (room._voteTimer) { clearTimeout(room._voteTimer); room._voteTimer = null }
+  const tally = {}
+  for (const m of MAPS) tally[m] = 0
+  for (const m of (room._votes?.values() || [])) tally[m]++
+  let winner = MAPS[0], best = -1
+  for (const m of MAPS) if (tally[m] > best) { best = tally[m]; winner = m }
+  room._votes = new Map()
+  broadcast(room, { t: 'mapChange', map: winner })
+}
+
 wss.on('connection', (ws) => {
   ws.id = null
   ws.room = null
@@ -90,6 +120,9 @@ wss.on('connection', (ws) => {
       case 'killed':
         // Victim reports who killed them; tell the whole room (kill feed + score).
         broadcast(room, { t: 'killed', by: msg.by, victim: ws.id })
+        break
+      case 'vote':
+        handleVote(room, ws.id, msg.map)
         break
     }
   })
