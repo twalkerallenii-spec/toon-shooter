@@ -18,6 +18,7 @@ export class Game {
     this.canvas = canvas
     this.state = STATE.MENU
     this.score = 0
+    this.selectedMap = 'arena'
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -58,6 +59,14 @@ export class Game {
     document.getElementById('online-btn').addEventListener('click', () => {
       if (this.state === STATE.PLAYING) return
       this.startOnline()
+    })
+
+    // Map selector buttons.
+    document.querySelectorAll('.map-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.selectedMap = btn.dataset.map
+        document.querySelectorAll('.map-btn').forEach((b) => b.classList.toggle('active', b === btn))
+      })
     })
 
     this.input.onLockChange = (locked) => {
@@ -134,9 +143,9 @@ export class Game {
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
 
-    // Build the designed arena from kit environment props.
+    // Build the selected map from kit environment props.
     const { LevelBuilder } = await import('../systems/LevelBuilder.js')
-    await new LevelBuilder({ world: this.world, assets: this.assets }).build()
+    await new LevelBuilder({ world: this.world, assets: this.assets }).build(this.selectedMap)
   }
 
   // Swap the FPS viewmodel to the given weapon def (cached load -> instant).

@@ -11,11 +11,26 @@ export class World {
 
     this.arenaRadius = 42 // half-extent of the square arena (kept name for callers)
     this.groundY = 0
-    this.obstacles = []
-    this.barrels = [] // explodable barrels: { group, obstacle, x, z, radius, alive }
+    this.obstacles = []   // { mesh, radius, x, z } — used for bullet raycasts
+    this.platforms = []   // AABB colliders { minX, maxX, minZ, maxZ, top, bottom } — movement
+    this.jumpPads = []    // { x, z, radius, power, mesh }
+    this.barrels = []     // explodable barrels: { group, obstacle, x, z, radius, alive }
 
     this._buildLights()
     this._buildGround()
+  }
+
+  // A glowing pad that launches the player upward when stepped on.
+  addJumpPad(x, z, power = 16) {
+    const geo = new THREE.CylinderGeometry(1.6, 1.8, 0.4, 16)
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x33e1ff, emissive: 0x14a0c0, emissiveIntensity: 1.2, roughness: 0.4,
+    })
+    const pad = new THREE.Mesh(geo, mat)
+    pad.position.set(x, 0.2, z)
+    pad.receiveShadow = true
+    this.scene.add(pad)
+    this.jumpPads.push({ x, z, radius: 1.8, power, mesh: pad })
   }
 
   _buildLights() {
@@ -63,17 +78,19 @@ export class World {
   //   radiusMul  shrink/grow the collider relative to footprint (default 0.8)
   //   groundOffset extra lift off the ground (default 0)
   // Returns the placed model (Object3D), or null if model missing.
-  placeModel(scene, { x = 0, z = 0, rotY = 0, scale = 1, solid = false, radiusMul = 0.8, groundOffset = 0, barrel = false } = {}) {
+  placeModel(scene, { x = 0, z = 0, rotY = 0, scale = 1, solid = false, radiusMul = 0.8, groundOffset = 0, barrel = false, climbable = true, baseY = null } = {}) {
     if (!scene) return null
     scene.scale.setScalar(scale)
     scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false } })
 
-    // Measure (scaled, at origin), then ground it and center on x/z.
+    // Measure (scaled, at origin), then place. baseY raises the model's base to a
+    // given height (for elevated platforms); otherwise it sits on the ground.
     const box = new THREE.Box3().setFromObject(scene)
     const size = new THREE.Vector3(); box.getSize(size)
     const center = new THREE.Vector3(); box.getCenter(center)
     scene.rotation.y = rotY
-    scene.position.set(x - center.x, -box.min.y + groundOffset, z - center.z)
+    const restY = baseY != null ? baseY - box.min.y : -box.min.y + groundOffset
+    scene.position.set(x - center.x, restY, z - center.z)
 
     this.scene.add(scene)
 
@@ -81,6 +98,17 @@ export class World {
       const footprint = Math.max(size.x, size.z) || 1
       const obstacle = { mesh: scene, radius: (footprint / 2) * radiusMul, x, z }
       this.obstacles.push(obstacle)
+
+      // AABB collider for movement (walk into it, or stand on top). Measure the
+      // placed model's true world bounds.
+      const wb = new THREE.Box3().setFromObject(scene)
+      this.platforms.push({
+        minX: wb.min.x, maxX: wb.max.x,
+        minZ: wb.min.z, maxZ: wb.max.z,
+        top: wb.max.y, bottom: wb.min.y,
+        climbable: climbable, // only let the player stand on top of low-ish props
+      })
+
       if (barrel) {
         const record = { group: scene, obstacle, x, z, radius: obstacle.radius, alive: true }
         scene.userData.barrel = record

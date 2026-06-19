@@ -157,6 +157,22 @@ body {
 #start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #b8901f; }
 #start-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #b8901f; }
 
+/* Map selector */
+.maps { margin: 6px 0 20px; }
+.maps-label { font-size: 12px; letter-spacing: 3px; opacity: 0.7; margin-bottom: 8px; }
+.map-options { display: flex; gap: 8px; justify-content: center; }
+.map-btn {
+  font: inherit; font-size: 14px; font-weight: 700; letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.7); cursor: pointer;
+  padding: 8px 16px; border-radius: 9px;
+  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: all 0.1s ease;
+}
+.map-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+.map-btn.active {
+  color: #1a1300; background: var(--accent); border-color: var(--accent);
+}
+
 /* Multiplayer menu block */
 .mp {
   margin-top: 20px; padding-top: 18px;

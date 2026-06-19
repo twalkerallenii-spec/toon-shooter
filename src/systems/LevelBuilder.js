@@ -22,7 +22,34 @@ export class LevelBuilder {
     return this.world.placeModel(scene, opts)
   }
 
-  async build() {
+  // Dispatch to a specific map layout.
+  async build(mapKey = 'arena') {
+    if (mapKey === 'outpost') return this.buildOutpost()
+    if (mapKey === 'rooftops') return this.buildRooftops()
+    return this.buildArena()
+  }
+
+  // Tile a scaled brick-wall perimeter around the square arena (decorative).
+  async _perimeter(scale = 1.6) {
+    const HALF = this.world.arenaRadius
+    const E = HALF - 1
+    const jobs = []
+    const wallProto = await this._load('BrickWall_1')
+    if (!wallProto) return
+    const seg = (measureWidth(wallProto) || 6) * scale
+    const count = Math.ceil((HALF * 2) / seg)
+    const step = (HALF * 2) / count
+    for (let i = 0; i < count; i++) {
+      const t = -HALF + step * (i + 0.5)
+      jobs.push(this.place('BrickWall_1', { x: t, z: -E, rotY: 0, scale }))
+      jobs.push(this.place('BrickWall_2', { x: t, z: E, rotY: Math.PI, scale }))
+      jobs.push(this.place('BrickWall_2', { x: -E, z: t, rotY: Math.PI / 2, scale }))
+      jobs.push(this.place('BrickWall_1', { x: E, z: t, rotY: -Math.PI / 2, scale }))
+    }
+    await Promise.all(jobs)
+  }
+
+  async buildArena() {
     const HALF = this.world.arenaRadius
     const E = HALF - 1 // edge line for the perimeter wall
     const rng = mulberry32(20240)
@@ -147,6 +174,97 @@ export class LevelBuilder {
       }))
     }
 
+    await Promise.all(jobs)
+  }
+
+  // OUTPOST: building-heavy layout with lanes between structures and lots of
+  // climbable container/crate cover. Tighter, more cover-to-cover combat.
+  async buildOutpost() {
+    const rng = mulberry32(7777)
+    const TAU = Math.PI * 2
+    const jobs = [this._perimeter(1.6)]
+
+    // A loose grid of buildings forming streets.
+    const bld = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
+    let bi = 0
+    for (let gx = -1; gx <= 1; gx++) {
+      for (let gz = -1; gz <= 1; gz++) {
+        if (gx === 0 && gz === 0) continue // keep the center plaza open
+        jobs.push(this.place(bld[bi++ % bld.length], {
+          x: gx * 22 + (rng() - 0.5) * 4, z: gz * 22 + (rng() - 0.5) * 4,
+          rotY: Math.round(rng() * 4) * (Math.PI / 2), solid: true, radiusMul: 0.7,
+        }))
+      }
+    }
+
+    // Climbable container stacks (cover you can mount) + crates beside them.
+    const stacks = [{ x: -10, z: 0 }, { x: 10, z: 6 }, { x: 0, z: -12 }, { x: 6, z: 14 }, { x: -16, z: -14 }]
+    for (const s of stacks) {
+      jobs.push(this.place('Container_Long', { x: s.x, z: s.z, rotY: rng() * TAU, solid: true }))
+      jobs.push(this.place('Crate', { x: s.x + 2.2, z: s.z + 1.5, rotY: rng() * TAU, solid: true }))
+      jobs.push(this.place('Crate', { x: s.x - 1.5, z: s.z - 2, rotY: rng() * TAU, solid: true }))
+      jobs.push(this.place('SackTrench', { x: s.x + (rng() - 0.5) * 6, z: s.z + (rng() - 0.5) * 6, rotY: rng() * TAU, solid: true }))
+    }
+
+    // Jump pads to reach the rooftops/containers.
+    this.world.addJumpPad(-10, 4, 13)
+    this.world.addJumpPad(10, 2, 13)
+
+    // Barrels + decoration.
+    for (let i = 0; i < 8; i++) {
+      let x = (rng() - 0.5) * 60, z = (rng() - 0.5) * 60
+      const d = Math.hypot(x, z); if (d < 7) { x = x / d * 7; z = z / d * 7 }
+      jobs.push(this.place('ExplodingBarrel', { x, z, solid: true, radiusMul: 0.9, barrel: true }))
+    }
+    const deco = ['StreetLight', 'TrafficCone', 'Debris_Tires', 'Sign', 'Pipes', 'Debris_Papers_1', 'Pallet_Broken']
+    for (let i = 0; i < 30; i++) {
+      jobs.push(this.place(deco[i % deco.length], { x: (rng() - 0.5) * 72, z: (rng() - 0.5) * 72, rotY: rng() * TAU }))
+    }
+    await Promise.all(jobs)
+  }
+
+  // ROOFTOPS: elevated container/platform islands at varying heights connected by
+  // jump pads — vertical, parkour-style combat above the ground.
+  async buildRooftops() {
+    const rng = mulberry32(4242)
+    const TAU = Math.PI * 2
+    const jobs = [this._perimeter(1.6)]
+
+    // Elevated platforms (raised via baseY). Player hops between them with pads.
+    const decks = [
+      { x: -14, z: -6, y: 2.5 }, { x: 14, z: 6, y: 2.5 },
+      { x: 12, z: -14, y: 4.5 }, { x: -12, z: 14, y: 4.5 },
+      { x: -22, z: 18, y: 6.5 }, { x: 22, z: -18, y: 6.5 },
+      { x: 0, z: 24, y: 5.5 }, { x: 0, z: -24, y: 5.5 },
+    ]
+    for (const d of decks) {
+      // Two long containers side by side make a wide deck.
+      jobs.push(this.place('Container_Long', { x: d.x - 1.6, z: d.z, rotY: 0, solid: true, baseY: d.y, climbable: true }))
+      jobs.push(this.place('Container_Long', { x: d.x + 1.6, z: d.z, rotY: 0, solid: true, baseY: d.y, climbable: true }))
+      // Sandbag cover on the deck.
+      jobs.push(this.place('SackTrench_Small', { x: d.x + (rng() - 0.5) * 3, z: d.z + 1.6, rotY: rng() * TAU, solid: true, baseY: d.y + 2.6 }))
+    }
+
+    // Jump pads at the base near each deck to launch up.
+    this.world.addJumpPad(0, 5, 12)
+    this.world.addJumpPad(-14, -1, 14)
+    this.world.addJumpPad(14, 1, 14)
+    this.world.addJumpPad(12, -9, 17)
+    this.world.addJumpPad(-12, 9, 17)
+    this.world.addJumpPad(-22, 13, 20)
+    this.world.addJumpPad(22, -13, 20)
+
+    // Ground-level cover so you're not helpless when you fall.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * TAU
+      jobs.push(this.place(i % 2 ? 'Crate' : 'SackTrench', {
+        x: Math.cos(a) * (16 + rng() * 12), z: Math.sin(a) * (16 + rng() * 12),
+        rotY: rng() * TAU, solid: true,
+      }))
+    }
+    for (let i = 0; i < 5; i++) {
+      jobs.push(this.place('ExplodingBarrel', { x: (rng() - 0.5) * 50, z: (rng() - 0.5) * 50, solid: true, radiusMul: 0.9, barrel: true }))
+    }
     await Promise.all(jobs)
   }
 }

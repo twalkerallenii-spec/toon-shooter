@@ -33,7 +33,7 @@ export class Player {
     // Movement tuning
     this.walkSpeed = 7
     this.sprintSpeed = 12
-    this.jumpSpeed = 8
+    this.jumpSpeed = 9.5 // enough to hop onto crates/sandbags
     this.gravity = -22
     this.mouseSensitivity = 0.0022
 
@@ -211,25 +211,67 @@ export class Player {
     this.position.y += this.velocity.y * dt
     this.position.z += this.velocity.z * dt
 
-    if (this.position.y <= this.world.groundY) {
-      this.position.y = this.world.groundY
-      this.velocity.y = 0
-      this.onGround = true
-    }
+    this._resolvePlatforms()
+    this.world.clampToArena(this.position)
 
-    for (const o of this.world.obstacles) {
-      const dx = this.position.x - o.mesh.position.x
-      const dz = this.position.z - o.mesh.position.z
-      const d = Math.hypot(dx, dz)
-      const minD = o.radius + 0.5
-      if (d < minD && d > 0.0001) {
-        const k = (minD - d) / d
-        this.position.x += dx * k
-        this.position.z += dz * k
+    // Jump pads launch you when standing on one.
+    if (this.onGround) {
+      for (const pad of this.world.jumpPads) {
+        if (Math.hypot(this.position.x - pad.x, this.position.z - pad.z) < pad.radius) {
+          this.velocity.y = pad.power
+          this.onGround = false
+          break
+        }
+      }
+    }
+  }
+
+  // AABB collision against world.platforms: block walls horizontally, and let the
+  // player stand on top of (and step up onto) low props. Sets onGround.
+  _resolvePlatforms() {
+    const r = 0.5, h = 1.6, step = 0.5
+    const p = this.position
+
+    // Horizontal: push out of any box whose body the player overlaps vertically.
+    for (const b of this.world.platforms) {
+      const feetY = p.y, headY = p.y + h
+      if (headY <= b.bottom + 0.02) continue   // entirely under an elevated platform
+      if (feetY >= b.top - step) continue       // on/above top -> don't shove off
+      const cx = Math.max(b.minX, Math.min(p.x, b.maxX))
+      const cz = Math.max(b.minZ, Math.min(p.z, b.maxZ))
+      const ddx = p.x - cx, ddz = p.z - cz
+      const d2 = ddx * ddx + ddz * ddz
+      if (d2 < r * r) {
+        if (d2 > 1e-8) {
+          const d = Math.sqrt(d2); const push = (r - d) / d
+          p.x += ddx * push; p.z += ddz * push
+        } else {
+          // Center inside footprint: pop out the nearest face.
+          const dl = p.x - b.minX, dr = b.maxX - p.x, dbk = p.z - b.minZ, df = b.maxZ - p.z
+          const m = Math.min(dl, dr, dbk, df)
+          if (m === dl) p.x = b.minX - r
+          else if (m === dr) p.x = b.maxX + r
+          else if (m === dbk) p.z = b.minZ - r
+          else p.z = b.maxZ + r
+        }
       }
     }
 
-    this.world.clampToArena(this.position)
+    // Vertical: highest support (ground or a platform top) beneath the feet.
+    let support = this.world.groundY
+    for (const b of this.world.platforms) {
+      if (!b.climbable) continue
+      if (p.x < b.minX - r || p.x > b.maxX + r) continue
+      if (p.z < b.minZ - r || p.z > b.maxZ + r) continue
+      if (b.top <= p.y + step && b.top > support) support = b.top
+    }
+    if (p.y <= support) {
+      p.y = support
+      if (this.velocity.y < 0) this.velocity.y = 0
+      this.onGround = true
+    } else {
+      this.onGround = false
+    }
   }
 
   _updateCamera(dt) {
