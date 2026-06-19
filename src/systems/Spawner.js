@@ -64,7 +64,7 @@ export class Spawner {
       const e = this.enemies[i]
       const wasAlive = e.alive
       const finished = e.update(dt, player, camera)
-      if (wasAlive && !e.alive) this.onKill?.() // counts the kill at death moment
+      if (wasAlive && !e.alive) this.onKill?.(e.group.position) // kill at death moment
       if (finished) {
         e.dispose()
         this.enemies.splice(i, 1)

@@ -6,7 +6,10 @@ import { World } from '../systems/World.js'
 import { Weapons } from '../systems/Weapons.js'
 import { Spawner } from '../systems/Spawner.js'
 import { Particles } from '../systems/Particles.js'
+import { Audio } from '../systems/Audio.js'
+import { Pickups } from '../systems/Pickups.js'
 import { Player } from '../entities/Player.js'
+import { Grenade } from '../entities/Grenade.js'
 import { Net } from '../net/Net.js'
 import { RemotePlayer } from '../entities/RemotePlayer.js'
 
@@ -33,6 +36,9 @@ export class Game {
 
     this.clock = new THREE.Clock()
     this._muzzle = new THREE.Vector3() // reused each frame for the tracer origin
+    this.audio = new Audio()
+    this._grenadeCd = 0
+    this._prevHp = 100
     this.input = new Input(canvas)
     this.hud = new HUD()
     this.assets = new AssetLoader()
@@ -95,23 +101,29 @@ export class Game {
     this.player = new Player({ world: this.world, input: this.input, camera: this.camera })
     this.weapons = new Weapons({ world: this.world, particles: this.particles })
     this.spawner = new Spawner({ world: this.world, assets: this.assets, weapons: this.weapons })
+    this.pickups = new Pickups({ world: this.world, assets: this.assets, audio: this.audio })
+    this.grenades = []
     this.score = 0
+    this._prevHp = this.player.maxHp
     this.remotePlayers = new Map() // id -> RemotePlayer (multiplayer)
+    this.player.onJumpPad = () => this.audio.jumpPad()
 
     // HUD hooks
     this.weapons.onFire = () => {
       this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
       this.player.notifyFired() // drives the shoot animation + aim facing
+      this.audio.shoot(this.weapons.def.key)
     }
-    this.weapons.onReloadStart = () => this.hud.setReloading(true)
+    this.weapons.onReloadStart = () => { this.hud.setReloading(true); this.audio.reload() }
     this.weapons.onReloadEnd = () => {
       this.hud.setReloading(false)
       this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
     }
     this.spawner.onWaveStart = (w) => this.hud.setWave(w)
-    this.spawner.onKill = () => {
+    this.spawner.onKill = (pos) => {
       this.score += 10
       this.hud.setScore(this.score)
+      if (pos) this.pickups.rollDrop(pos.x, pos.z)
     }
     this.weapons.onSwitch = (def, i) => {
       this._setWeaponViewmodel(def)
@@ -156,6 +168,7 @@ export class Game {
   }
 
   start() {
+    this.audio.resume()
     this._disconnect() // solo play: drop any prior connection
     this._resetGameObjects()
     this.state = STATE.PLAYING
@@ -168,6 +181,7 @@ export class Game {
 
   // Connect to the relay server, then start once joined.
   startOnline() {
+    this.audio.resume()
     const status = document.getElementById('mp-status')
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
     const room = (document.getElementById('mp-room').value || 'lobby').trim()
@@ -263,6 +277,10 @@ export class Game {
     // Reload (R).
     if (this.input.isDown('KeyR')) this.weapons.startReload()
 
+    // Grenade (G).
+    this._grenadeCd = Math.max(0, this._grenadeCd - dt)
+    if (this.input.isDown('KeyG')) this.throwGrenade()
+
     // Aim-down-sights (right mouse).
     const ads = this.input.mouse.right && this.player.alive
     this.player.setADS(ads)
@@ -277,8 +295,8 @@ export class Game {
       const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle, ads)
       if (res.fired) {
         firedThisFrame = true
-        if (res.killed) this.hud.hitMarker(true)
-        else if (res.hit) this.hud.hitMarker(false)
+        if (res.killed) { this.hud.hitMarker(true); this.audio.kill() }
+        else if (res.hit) { this.hud.hitMarker(false); this.audio.hit() }
         if (res.barrel) this.explode(res.barrel)
         // Broadcast the shot so other players see a tracer.
         if (this.net) {
@@ -291,6 +309,16 @@ export class Game {
 
     this.player.update(dt)
     this.particles.update(dt)
+    this.pickups.update(dt, this.player, this.weapons)
+
+    // Grenades.
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      if (this.grenades[i].update(dt)) this.grenades.splice(i, 1)
+    }
+
+    // Hurt sound when HP drops.
+    if (this.player.hp < this._prevHp) this.audio.hurt()
+    this._prevHp = this.player.hp
 
     // Multiplayer: broadcast local state + interpolate remote players.
     if (this.net) {
@@ -321,40 +349,57 @@ export class Game {
     this.renderer.render(this.world.scene, this.camera)
   }
 
-  // Explode a barrel: particle FX, area damage to enemies + player, and chain
-  // reactions to nearby barrels.
+  // Explode a barrel (FX + area damage + chain reactions).
   explode(barrel, depth = 0) {
     if (!barrel.alive) return
     this.world.removeBarrel(barrel)
+    this.explodeAt(new THREE.Vector3(barrel.x, 1.0, barrel.z), { radius: 9, damage: 140, depth })
+  }
 
-    const pos = new THREE.Vector3(barrel.x, 1.0, barrel.z)
-    // Fireball + sparks + smoke.
+  // Generic explosion at a point — used by barrels and grenades.
+  explodeAt(pos, { radius = 8, damage = 120, depth = 0 } = {}) {
     this.particles.emit(pos, 64, { color: [1, 0.55, 0.12], speed: 15, spread: 11, size: 2.4, life: 0.5, gravity: -2, drag: 3, up: 4 })
     this.particles.emit(pos, 28, { color: [1, 0.92, 0.45], speed: 22, spread: 14, size: 1.0, life: 0.32, gravity: -2, drag: 4 })
     this.particles.emit(pos, 40, { color: [0.18, 0.18, 0.18], speed: 6, spread: 5, size: 3.6, life: 1.2, gravity: 1.4, drag: 1.4, up: 3 })
-    this.weapons.impact(pos, 0xffa030) // bright flash sphere
+    this.weapons.impact(pos, 0xffa030)
+    this.audio.explosion()
 
-    const R = 9 // blast radius
     for (const e of this.spawner.enemies) {
       if (!e.alive) continue
       const d = Math.hypot(e.group.position.x - pos.x, e.group.position.z - pos.z)
-      if (d < R) {
-        const killed = e.takeHit(140 * (1 - d / R))
-        if (killed) { this.score += 10; this.hud.setScore(this.score) }
+      if (d < radius) {
+        const killed = e.takeHit(damage * (1 - d / radius))
+        if (killed) {
+          this.score += 10; this.hud.setScore(this.score)
+          this.pickups.rollDrop(e.group.position.x, e.group.position.z)
+        }
       }
     }
     const pd = Math.hypot(this.player.position.x - pos.x, this.player.position.z - pos.z)
-    if (pd < R && this.player.alive) this.player.takeDamage(50 * (1 - pd / R))
+    if (pd < radius && this.player.alive) this.player.takeDamage((damage * 0.36) * (1 - pd / radius))
 
-    // Chain nearby barrels (slight depth cap to avoid runaway recursion).
+    // Chain nearby barrels.
     if (depth < 6) {
       for (const b of this.world.barrels) {
         if (b.alive) {
           const d = Math.hypot(b.x - pos.x, b.z - pos.z)
-          if (d < R + b.radius) this.explode(b, depth + 1)
+          if (d < radius + b.radius) this.explode(b, depth + 1)
         }
       }
     }
+  }
+
+  throwGrenade() {
+    if (this._grenadeCd > 0 || !this.player.alive) return
+    this._grenadeCd = 1.0
+    const aim = this.player.getAimRay()
+    const start = aim.origin.clone().addScaledVector(aim.dir, 0.8)
+    const vel = aim.dir.clone().multiplyScalar(20)
+    vel.y += 4 // slight lob
+    this.grenades.push(new Grenade({
+      world: this.world, assets: this.assets, position: start, velocity: vel,
+      onExplode: (p) => this.explodeAt(p, { radius: 7, damage: 110 }),
+    }))
   }
 
   _renderOnce() {

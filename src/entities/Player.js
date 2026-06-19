@@ -220,6 +220,7 @@ export class Player {
         if (Math.hypot(this.position.x - pad.x, this.position.z - pad.z) < pad.radius) {
           this.velocity.y = pad.power
           this.onGround = false
+          this.onJumpPad?.()
           break
         }
       }
