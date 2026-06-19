@@ -13,6 +13,7 @@ export class HUD {
       weaponName: document.getElementById('weapon-name'),
       weaponList: document.getElementById('weapon-list'),
       killfeed: document.getElementById('killfeed'),
+      stormWarning: document.getElementById('storm-warning'),
       adsVignette: document.getElementById('ads-vignette'),
       overlay: document.getElementById('overlay'),
       overlayMsg: document.getElementById('overlay-msg'),
@@ -71,6 +72,8 @@ export class HUD {
   }
 
   clearKillFeed() { this.el.killfeed.innerHTML = '' }
+
+  setStorm(on) { this.el.stormWarning.classList.toggle('hidden', !on) }
 
   // Dynamic reticle bloom: 0 = tight, larger = wider gap. Smoothed toward target.
   setCrosshairSpread(extra) {

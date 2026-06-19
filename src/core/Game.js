@@ -9,6 +9,7 @@ import { Spawner } from '../systems/Spawner.js'
 import { Particles } from '../systems/Particles.js'
 import { Audio } from '../systems/Audio.js'
 import { Pickups } from '../systems/Pickups.js'
+import { Zone } from '../systems/Zone.js'
 import { Player } from '../entities/Player.js'
 import { Grenade } from '../entities/Grenade.js'
 import { Net } from '../net/Net.js'
@@ -82,6 +83,11 @@ export class Game {
       this.startOnline()
     })
 
+    // Solo Battle Royale.
+    document.getElementById('br-btn').addEventListener('click', () => {
+      if (this.state === STATE.MENU || this.state === STATE.DEAD) this.start(true)
+    })
+
     // Map selector buttons.
     document.querySelectorAll('.map-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -139,6 +145,7 @@ export class Game {
     this.spawner = new Spawner({ world: this.world, assets: this.assets, weapons: this.weapons })
     this.pickups = new Pickups({ world: this.world, assets: this.assets, audio: this.audio })
     this.grenades = []
+    this.zone = this.brMode ? new Zone(this.world) : null
     this.score = 0
     this._prevHp = this.player.maxHp
     this._deadHandled = false
@@ -146,6 +153,7 @@ export class Game {
     this.remotePlayers = new Map() // id -> RemotePlayer (multiplayer)
     this.player.onJumpPad = () => this.audio.jumpPad()
     this.hud.clearKillFeed()
+    this.hud.setStorm(false)
     this._applySettings()
 
     // HUD hooks
@@ -207,9 +215,10 @@ export class Game {
     })
   }
 
-  start() {
+  start(br = false) {
     this.audio.resume()
     this.onlineMode = null // solo = co-op waves
+    this.brMode = !!br      // solo battle royale = storm survival + enemies
     this._disconnect() // solo play: drop any prior connection
     this._resetGameObjects()
     this.state = STATE.PLAYING
@@ -228,6 +237,7 @@ export class Game {
     const room = (document.getElementById('mp-room').value || 'lobby').trim()
     const url = (document.getElementById('mp-server').value || 'ws://localhost:8080').trim()
     this.onlineMode = document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
+    this.brMode = this.onlineMode === 'br'
     status.textContent = 'Connecting…'
 
     this._disconnect()
@@ -298,6 +308,13 @@ export class Game {
     this.kills = this.kills || 0
     this.deaths = (this.deaths || 0) + 1
     this.hud.setScore(`${this.kills}/${this.deaths}`)
+    // Battle royale = no respawn; you're eliminated.
+    if (this.brMode) {
+      this.state = STATE.DEAD
+      if (!this.input.isTouch) this.input.exitLock()
+      this.hud.showOverlay(`Eliminated. Kills: ${this.kills}.`, 'PLAY AGAIN')
+      return
+    }
     setTimeout(() => this._respawn(), 1800)
   }
 
@@ -442,7 +459,10 @@ export class Game {
     if (firedThisFrame || this.weapons.reloading) spread += 12
     this.hud.setCrosshairSpread(spread)
     this.weapons.update(dt)
-    if (this.onlineMode !== 'dm') this.spawner.update(dt, this.player, this.camera)
+    // Enemies: on in solo (incl. solo BR storm) and online co-op; off in PvP modes.
+    const pvpMode = this.onlineMode === 'dm' || this.onlineMode === 'team' || this.onlineMode === 'br'
+    if (!pvpMode) this.spawner.update(dt, this.player, this.camera)
+    if (this.zone) this.hud.setStorm(this.zone.update(dt, this.player))
 
     this.hud.setHp(this.player.hp, this.player.maxHp)
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
@@ -531,6 +551,15 @@ export class Game {
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'
     ctx.lineWidth = 2
     ctx.strokeRect(sx(-HALF), sz(-HALF), R * 2, R * 2)
+
+    // Battle-royale safe zone circle.
+    if (this.zone) {
+      ctx.strokeStyle = '#39c6ff'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(sx(this.zone.cx), sz(this.zone.cz), (this.zone.radius / HALF) * R, 0, Math.PI * 2)
+      ctx.stroke()
+    }
 
     const dot = (x, z, color, r = 3) => {
       ctx.fillStyle = color

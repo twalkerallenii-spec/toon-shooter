@@ -270,6 +270,21 @@ body.touch #mobile-controls { display: block; }
 #online-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #2176c4; }
 #mp-status { font-size: 13px; min-height: 16px; color: var(--accent); }
 
+#br-btn {
+  display: block; width: 100%; margin-top: 10px;
+  font: inherit; font-size: 15px; font-weight: 800; letter-spacing: 2px;
+  color: #fff; background: rgba(120, 40, 200, 0.45);
+  border: 1px solid #a05cff; border-radius: 10px; padding: 10px; cursor: pointer;
+}
+#br-btn:hover { background: rgba(120, 40, 200, 0.7); }
+
+#storm-warning {
+  position: absolute; top: 86px; left: 50%; transform: translateX(-50%);
+  background: rgba(150, 30, 200, 0.55); color: #fff;
+  padding: 6px 16px; border-radius: 8px; font-weight: 700; font-size: 14px;
+  letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
 .controls {
   list-style: none; margin-top: 26px;
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px;
