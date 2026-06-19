@@ -61,8 +61,9 @@ export class Game {
 
   _buildWorld() {
     this.world = new World()
-    this.camera.position.set(0, 6, 14)
-    this.camera.lookAt(0, 1, 0)
+    this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
+    this.camera.updateProjectionMatrix()
+    this.camera.position.set(0, 1.6, 0)
   }
 
   _resetGameObjects() {
@@ -91,10 +92,19 @@ export class Game {
       this.score += 10
       this.hud.setScore(this.score)
     }
+    this.weapons.onSwitch = (def, i) => {
+      this._setWeaponViewmodel(def)
+      this.player.setWeapon(def)
+      this.hud.setWeapon(def, i)
+      this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
+      this.hud.setReloading(false)
+    }
 
     this.hud.setHp(this.player.hp, this.player.maxHp)
     this.hud.setScore(0)
     this.hud.setWave(1)
+    this.hud.initWeapons(this.weapons.defs)
+    this.hud.setWeapon(this.weapons.def, this.weapons.index)
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
     this.hud.setReloading(false)
 
@@ -103,9 +113,11 @@ export class Game {
   }
 
   async _loadOptionalModels() {
-    // First-person gun viewmodel (the kit AK), mounted to the camera.
-    const ak = await this.assets.loadModel('models/guns/AK.gltf')
-    if (ak) this.player.setViewmodel(ak.scene)
+    // Preload every weapon model so switching is instant, then mount the current.
+    await Promise.all(this.weapons.defs.map((d) =>
+      this.assets.loadModel(`models/guns/${d.model}.gltf`)))
+    this._setWeaponViewmodel(this.weapons.def)
+    this.player.setWeapon(this.weapons.def)
 
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
@@ -113,6 +125,13 @@ export class Game {
     // Build the designed arena from kit environment props.
     const { LevelBuilder } = await import('../systems/LevelBuilder.js')
     await new LevelBuilder({ world: this.world, assets: this.assets }).build()
+  }
+
+  // Swap the FPS viewmodel to the given weapon def (cached load -> instant).
+  _setWeaponViewmodel(def) {
+    this.assets.loadModel(`models/guns/${def.model}.gltf`).then((m) => {
+      if (m && this.weapons.def === def) this.player.setViewmodel(m.scene)
+    })
   }
 
   start() {
@@ -155,11 +174,28 @@ export class Game {
 
     const dt = Math.min(0.05, this.clock.getDelta())
 
-    // Shooting (hold to fire; Weapons enforces fire rate).
+    // Weapon switching: number keys + mouse wheel.
+    for (let i = 0; i < this.weapons.defs.length; i++) {
+      if (this.input.isDown(`Digit${i + 1}`)) this.weapons.switchTo(i)
+    }
+    const wheel = this.input.consumeWheel()
+    if (wheel) this.weapons.cycle(wheel)
+
+    // Reload (R).
+    if (this.input.isDown('KeyR')) this.weapons.startReload()
+
+    // Aim-down-sights (right mouse).
+    const ads = this.input.mouse.right && this.player.alive
+    this.player.setADS(ads)
+    this.hud.setAds(this.player.adsAmount > 0.5)
+
+    // Shooting: auto weapons fire while held; semi-auto fire once per click.
     let firedThisFrame = false
-    if (this.input.mouse.down && this.player.alive) {
+    const click = this.input.consumeClick()
+    const wantFire = this.weapons.auto ? this.input.mouse.down : click
+    if (wantFire && this.player.alive) {
       const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
-      const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle)
+      const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle, ads)
       if (res.fired) {
         firedThisFrame = true
         if (res.killed) this.hud.hitMarker(true)

@@ -3,12 +3,13 @@ export class Input {
   constructor(domElement) {
     this.dom = domElement
     this.keys = new Set()
-    this.mouse = { dx: 0, dy: 0, down: false }
+    this.mouse = { dx: 0, dy: 0, down: false, right: false }
     this.locked = false
+    this._clicked = false  // left-button press edge (for semi-auto)
+    this._wheel = 0        // accumulated wheel steps (-1/+1)
 
     this._onKeyDown = (e) => {
       this.keys.add(e.code)
-      // Prevent the page from scrolling on space, etc.
       if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault()
     }
     this._onKeyUp = (e) => this.keys.delete(e.code)
@@ -17,8 +18,16 @@ export class Input {
       this.mouse.dx += e.movementX
       this.mouse.dy += e.movementY
     }
-    this._onMouseDown = (e) => { if (e.button === 0) this.mouse.down = true }
-    this._onMouseUp = (e) => { if (e.button === 0) this.mouse.down = false }
+    this._onMouseDown = (e) => {
+      if (e.button === 0) { this.mouse.down = true; this._clicked = true }
+      if (e.button === 2) this.mouse.right = true
+    }
+    this._onMouseUp = (e) => {
+      if (e.button === 0) this.mouse.down = false
+      if (e.button === 2) this.mouse.right = false
+    }
+    this._onWheel = (e) => { this._wheel += Math.sign(e.deltaY) }
+    this._onContextMenu = (e) => e.preventDefault() // don't show menu on right-click
     this._onLockChange = () => {
       this.locked = document.pointerLockElement === this.dom
       if (this.onLockChange) this.onLockChange(this.locked)
@@ -29,7 +38,23 @@ export class Input {
     window.addEventListener('mousemove', this._onMouseMove)
     window.addEventListener('mousedown', this._onMouseDown)
     window.addEventListener('mouseup', this._onMouseUp)
+    window.addEventListener('wheel', this._onWheel, { passive: true })
+    window.addEventListener('contextmenu', this._onContextMenu)
     document.addEventListener('pointerlockchange', this._onLockChange)
+  }
+
+  // True once per physical left-click (consumed). Used for semi-auto weapons.
+  consumeClick() {
+    const c = this._clicked
+    this._clicked = false
+    return c
+  }
+
+  // Returns accumulated wheel direction since last call (-1, 0, or +1+), cleared.
+  consumeWheel() {
+    const w = this._wheel
+    this._wheel = 0
+    return w
   }
 
   requestLock() {

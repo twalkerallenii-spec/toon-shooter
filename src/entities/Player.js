@@ -44,16 +44,47 @@ export class Player {
     this.recoil = 0
     this.shootingTimer = 0
 
-    // Viewmodel + muzzle live in camera space so they track the view.
-    this.gunBase = new THREE.Vector3(0.2, -0.18, -0.55)
+    // Aim-down-sights
+    this.adsActive = false
+    this.adsAmount = 0          // 0 = hip, 1 = fully aimed (smoothed)
+    this.baseFov = camera.fov
+    this.adsTargetFov = 50
+    this.weaponRecoil = 0.05
+
+    // Viewmodel positions (camera space): hip vs aimed.
+    this.gunHip = new THREE.Vector3(0.2, -0.18, -0.55)
+    this.gunAds = new THREE.Vector3(0.0, -0.115, -0.42)
+    this.gunBase = this.gunHip.clone()
+
+    // Muzzle anchor (gun tip) + flash, in camera space so they track the view.
     this.muzzle = new THREE.Object3D()
     this.muzzle.position.set(0.2, -0.1, -1.0)
     this.camera.add(this.muzzle)
+
+    this.flashTimer = 0
+    this.muzzleFlash = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })
+    )
+    this.muzzleFlash.renderOrder = 30
+    this.muzzleFlash.visible = false
+    this.muzzle.add(this.muzzleFlash)
   }
 
+  // Update per-weapon view params (ADS zoom + recoil strength).
+  setWeapon(def) {
+    if (!def) return
+    this.adsTargetFov = def.adsFov ?? 50
+    this.weaponRecoil = def.recoil ?? 0.05
+  }
+
+  setADS(active) { this.adsActive = active }
+
   // Mount a kit gun as the first-person viewmodel (parented to the camera).
+  // Replaces any current viewmodel (used for weapon switching).
   setViewmodel(gunScene) {
     if (!gunScene) return
+    if (this.gun) { this.camera.remove(this.gun); this.gun = null }
     // Draw the viewmodel on top so it never clips into world geometry.
     gunScene.traverse((o) => {
       if (o.isMesh) {
@@ -105,7 +136,8 @@ export class Player {
 
   notifyFired() {
     this.shootingTimer = 0.15
-    this.recoil = Math.min(this.recoil + 0.05, 0.18) // accumulate kick
+    this.recoil = Math.min(this.recoil + this.weaponRecoil, 0.22) // accumulate kick
+    this.flashTimer = 0.045
   }
 
   update(dt) {
@@ -113,6 +145,27 @@ export class Player {
     this._handleMove(dt)
     if (this.shootingTimer > 0) this.shootingTimer -= dt
     this.recoil *= Math.max(0, 1 - dt * 9) // recover from kick
+
+    // Smooth ADS transition + FOV zoom.
+    const adsTarget = this.adsActive && this.alive ? 1 : 0
+    this.adsAmount += (adsTarget - this.adsAmount) * Math.min(1, dt * 12)
+    const fov = this.baseFov + (this.adsTargetFov - this.baseFov) * this.adsAmount
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov
+      this.camera.updateProjectionMatrix()
+    }
+    this.gunBase.lerpVectors(this.gunHip, this.gunAds, this.adsAmount)
+
+    // Muzzle flash flicker.
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt
+      this.muzzleFlash.visible = true
+      this.muzzleFlash.scale.setScalar(0.7 + Math.random() * 0.9)
+      this.muzzleFlash.rotation.z = Math.random() * Math.PI
+    } else if (this.muzzleFlash) {
+      this.muzzleFlash.visible = false
+    }
+
     this._updateCamera(dt)
   }
 

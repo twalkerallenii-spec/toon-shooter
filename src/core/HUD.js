@@ -10,6 +10,9 @@ export class HUD {
       ammo: document.getElementById('ammo'),
       ammoMax: document.getElementById('ammo-max'),
       reloadHint: document.getElementById('reload-hint'),
+      weaponName: document.getElementById('weapon-name'),
+      weaponList: document.getElementById('weapon-list'),
+      adsVignette: document.getElementById('ads-vignette'),
       overlay: document.getElementById('overlay'),
       overlayMsg: document.getElementById('overlay-msg'),
       startBtn: document.getElementById('start-btn'),
@@ -35,6 +38,25 @@ export class HUD {
 
   setReloading(on) {
     this.el.reloadHint.classList.toggle('hidden', !on)
+  }
+
+  // Build the bottom weapon strip once from the roster.
+  initWeapons(defs) {
+    this.el.weaponList.innerHTML = defs
+      .map((d, i) => `<span class="wpn" data-i="${i}"><b>${i + 1}</b>${d.key}</span>`)
+      .join('')
+    this._wpnEls = [...this.el.weaponList.querySelectorAll('.wpn')]
+  }
+
+  setWeapon(def, index) {
+    this.el.weaponName.textContent = def.key
+    if (this._wpnEls) {
+      this._wpnEls.forEach((el, i) => el.classList.toggle('active', i === index))
+    }
+  }
+
+  setAds(on) {
+    this.el.adsVignette.classList.toggle('on', on)
   }
 
   // Dynamic reticle bloom: 0 = tight, larger = wider gap. Smoothed toward target.

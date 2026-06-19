@@ -92,6 +92,37 @@ body {
 .stat-num .label { margin-right: 8px; }
 #reload-hint { font-size: 16px; color: var(--accent); letter-spacing: 2px; }
 
+#weapon-name {
+  font-size: 18px; font-weight: 700; letter-spacing: 3px;
+  color: var(--accent); text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Weapon switcher strip (bottom-center) */
+#weapon-list {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px;
+}
+#weapon-list .wpn {
+  font-size: 13px; letter-spacing: 1px;
+  padding: 4px 10px; border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+}
+#weapon-list .wpn b { color: rgba(255, 255, 255, 0.45); margin-right: 5px; }
+#weapon-list .wpn.active {
+  background: rgba(255, 203, 61, 0.2); border-color: var(--accent); color: #fff;
+}
+#weapon-list .wpn.active b { color: var(--accent); }
+
+/* ADS vignette (subtle scope darkening at screen edges) */
+#ads-vignette {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  transition: opacity 0.12s ease;
+  background: radial-gradient(circle at 50% 50%, transparent 38%, rgba(0, 0, 0, 0.55) 75%);
+}
+#ads-vignette.on { opacity: 1; }
+
 /* ---------- Overlay ---------- */
 #overlay {
   position: fixed; inset: 0;
