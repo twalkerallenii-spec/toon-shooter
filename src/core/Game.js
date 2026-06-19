@@ -23,6 +23,14 @@ export class Game {
     this.score = 0
     this.selectedMap = 'arena'
 
+    // Persisted settings.
+    this.settings = { sens: 1, invertY: false }
+    try { Object.assign(this.settings, JSON.parse(localStorage.getItem('ts_settings') || '{}')) } catch {}
+
+    // Minimap canvas.
+    this.minimap = document.getElementById('minimap')
+    this.minimapCtx = this.minimap?.getContext('2d')
+
     // Renderer
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -82,6 +90,20 @@ export class Game {
       })
     })
 
+    // Settings (sensitivity + invert-Y), persisted to localStorage.
+    const sens = document.getElementById('set-sens')
+    const invert = document.getElementById('set-invert')
+    sens.value = this.settings.sens
+    invert.checked = this.settings.invertY
+    const saveSettings = () => {
+      this.settings.sens = parseFloat(sens.value)
+      this.settings.invertY = invert.checked
+      localStorage.setItem('ts_settings', JSON.stringify(this.settings))
+      this._applySettings()
+    }
+    sens.addEventListener('input', saveSettings)
+    invert.addEventListener('change', saveSettings)
+
     this.input.onLockChange = (locked) => {
       // Losing the pointer lock mid-game = pause.
       if (!locked && this.state === STATE.PLAYING) this.pause()
@@ -117,6 +139,7 @@ export class Game {
     this.remotePlayers = new Map() // id -> RemotePlayer (multiplayer)
     this.player.onJumpPad = () => this.audio.jumpPad()
     this.hud.clearKillFeed()
+    this._applySettings()
 
     // HUD hooks
     this.weapons.onFire = () => {
@@ -408,6 +431,7 @@ export class Game {
       else this.gameOver()
     }
 
+    this._drawMinimap()
     this.renderer.render(this.world.scene, this.camera)
   }
 
@@ -462,6 +486,46 @@ export class Game {
       world: this.world, assets: this.assets, position: start, velocity: vel,
       onExplode: (p) => this.explodeAt(p, { radius: 7, damage: 110 }),
     }))
+  }
+
+  _applySettings() {
+    if (!this.player) return
+    this.player.mouseSensitivity = 0.0022 * this.settings.sens
+    this.player.invertY = this.settings.invertY
+  }
+
+  // Top-down radar: player (heading), enemies, remote players, pickups.
+  _drawMinimap() {
+    const ctx = this.minimapCtx
+    if (!ctx) return
+    const W = this.minimap.width, H = this.minimap.height
+    const cx = W / 2, cy = H / 2
+    const HALF = this.world.arenaRadius
+    const R = (W / 2) - 10
+    const sx = (x) => cx + (x / HALF) * R
+    const sz = (z) => cy + (z / HALF) * R
+
+    ctx.clearRect(0, 0, W, H)
+    // Arena bounds.
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(sx(-HALF), sz(-HALF), R * 2, R * 2)
+
+    const dot = (x, z, color, r = 3) => {
+      ctx.fillStyle = color
+      ctx.beginPath(); ctx.arc(sx(x), sz(z), r, 0, Math.PI * 2); ctx.fill()
+    }
+    for (const it of this.pickups.items) dot(it.x, it.z, it.type === 'health' ? '#4ade80' : '#ffcb3d', 2.5)
+    for (const e of this.spawner.enemies) if (e.alive) dot(e.group.position.x, e.group.position.z, '#ff5555')
+    if (this.net) for (const rp of this.remotePlayers.values()) dot(rp.group.position.x, rp.group.position.z, '#5ab0ff')
+
+    // Player as a heading triangle.
+    const px = sx(this.player.position.x), py = sz(this.player.position.z)
+    const a = -this.player.yaw // screen z+ is down
+    ctx.save(); ctx.translate(px, py); ctx.rotate(a)
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill()
+    ctx.restore()
   }
 
   _renderOnce() {

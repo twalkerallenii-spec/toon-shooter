@@ -36,6 +36,7 @@ export class Player {
     this.jumpSpeed = 9.5 // enough to hop onto crates/sandbags
     this.gravity = -22
     this.mouseSensitivity = 0.0022
+    this.invertY = false
 
     // View feel
     this.moving = false
@@ -172,7 +173,7 @@ export class Player {
   _handleLook() {
     const { dx, dy } = this.input.consumeMouseDelta()
     this.yaw -= dx * this.mouseSensitivity
-    this.pitch -= dy * this.mouseSensitivity
+    this.pitch += (this.invertY ? dy : -dy) * this.mouseSensitivity
     this.pitch = Math.max(-1.4, Math.min(1.4, this.pitch))
   }
 

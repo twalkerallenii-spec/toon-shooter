@@ -37,6 +37,7 @@
       </div>
       <div id="weapon-list"></div>
       <div id="killfeed"></div>
+      <canvas id="minimap" width="170" height="170"></canvas>
       <div id="ads-vignette"></div>
     </div>
 
@@ -52,6 +53,15 @@
             <button class="map-btn" data-map="outpost">Outpost</button>
             <button class="map-btn" data-map="rooftops">Rooftops</button>
           </div>
+        </div>
+
+        <div class="settings">
+          <label class="set-row">Sensitivity
+            <input id="set-sens" type="range" min="0.2" max="3" step="0.1" value="1" />
+          </label>
+          <label class="set-row set-check">
+            <input id="set-invert" type="checkbox" /> Invert look (Y)
+          </label>
         </div>
 
         <button id="start-btn">PLAY</button>
