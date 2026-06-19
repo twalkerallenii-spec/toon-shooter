@@ -99,7 +99,7 @@ export class Player {
     const size = new THREE.Vector3(); box.getSize(size)
     const longest = Math.max(size.x, size.y, size.z) || 1
     gunScene.scale.setScalar(0.55 / longest)
-    gunScene.rotation.y = Math.PI / 2 // kit guns run along X -> point along -Z
+    gunScene.rotation.y = -Math.PI / 2 // kit guns run along X -> point barrel along -Z (forward)
 
     const box2 = new THREE.Box3().setFromObject(gunScene)
     const center = new THREE.Vector3(); box2.getCenter(center)

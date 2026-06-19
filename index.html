@@ -45,6 +45,17 @@
         <h1>TOON&nbsp;SHOOTER</h1>
         <p id="overlay-msg">Survive the waves. Click to lock your mouse and shoot.</p>
         <button id="start-btn">PLAY</button>
+
+        <div class="mp">
+          <div class="mp-row">
+            <input id="mp-name" placeholder="Your name" maxlength="16" />
+            <input id="mp-room" placeholder="Room" value="lobby" maxlength="24" />
+          </div>
+          <input id="mp-server" placeholder="ws://localhost:8080" />
+          <button id="online-btn">PLAY ONLINE</button>
+          <div id="mp-status"></div>
+        </div>
+
         <ul class="controls">
           <li><b>WASD</b> move</li>
           <li><b>Mouse</b> aim</li>

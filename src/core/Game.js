@@ -7,6 +7,8 @@ import { Weapons } from '../systems/Weapons.js'
 import { Spawner } from '../systems/Spawner.js'
 import { Particles } from '../systems/Particles.js'
 import { Player } from '../entities/Player.js'
+import { Net } from '../net/Net.js'
+import { RemotePlayer } from '../entities/RemotePlayer.js'
 
 // Game states
 const STATE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', DEAD: 'dead' }
@@ -49,6 +51,15 @@ export class Game {
       else if (this.state === STATE.PAUSED) this.resume()
     })
 
+    // Multiplayer: prefill server from ?server= and wire the PLAY ONLINE button.
+    const params = new URLSearchParams(location.search)
+    const serverInput = document.getElementById('mp-server')
+    if (params.get('server')) serverInput.value = params.get('server')
+    document.getElementById('online-btn').addEventListener('click', () => {
+      if (this.state === STATE.PLAYING) return
+      this.startOnline()
+    })
+
     this.input.onLockChange = (locked) => {
       // Losing the pointer lock mid-game = pause.
       if (!locked && this.state === STATE.PLAYING) this.pause()
@@ -76,6 +87,7 @@ export class Game {
     this.weapons = new Weapons({ world: this.world, particles: this.particles })
     this.spawner = new Spawner({ world: this.world, assets: this.assets, weapons: this.weapons })
     this.score = 0
+    this.remotePlayers = new Map() // id -> RemotePlayer (multiplayer)
 
     // HUD hooks
     this.weapons.onFire = () => {
@@ -135,6 +147,7 @@ export class Game {
   }
 
   start() {
+    this._disconnect() // solo play: drop any prior connection
     this._resetGameObjects()
     this.state = STATE.PLAYING
     this.hud.hideOverlay()
@@ -142,6 +155,63 @@ export class Game {
     this.input.requestLock()
     this.clock.getDelta() // reset dt
     this._loop()
+  }
+
+  // Connect to the relay server, then start once joined.
+  startOnline() {
+    const status = document.getElementById('mp-status')
+    const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
+    const room = (document.getElementById('mp-room').value || 'lobby').trim()
+    const url = (document.getElementById('mp-server').value || 'ws://localhost:8080').trim()
+    status.textContent = 'Connecting…'
+
+    this._disconnect()
+    this._resetGameObjects()
+
+    this.net = new Net({
+      url, name, room,
+      handlers: {
+        onWelcome: (id, peers) => {
+          status.textContent = ''
+          for (const peer of peers) this._addRemote(peer.id, peer.name, peer.p)
+          this.state = STATE.PLAYING
+          this.hud.hideOverlay()
+          this.hud.show()
+          this.input.requestLock()
+          this.clock.getDelta()
+          this._loop()
+        },
+        onPeerJoin: (id, pname) => this._addRemote(id, pname),
+        onPeerLeave: (id) => {
+          this.remotePlayers.get(id)?.dispose()
+          this.remotePlayers.delete(id)
+        },
+        onState: (id, p) => this.remotePlayers.get(id)?.setState(p),
+        onShoot: (id, from, to) => {
+          if (from && to) this.weapons.beam(
+            new THREE.Vector3(from[0], from[1], from[2]),
+            new THREE.Vector3(to[0], to[1], to[2]), 0x9ad0ff, 0.06)
+        },
+        onHit: (fromId, dmg) => this.player.takeDamage(dmg),
+        onError: () => { status.textContent = 'Connection failed. Is the server running?' },
+        onClose: () => { if (this.state === STATE.PLAYING) status.textContent = 'Disconnected.' },
+      },
+    })
+  }
+
+  _addRemote(id, name, state) {
+    if (this.remotePlayers.has(id)) return
+    const rp = new RemotePlayer({ world: this.world, assets: this.assets, name })
+    if (state) rp.setState(state)
+    this.remotePlayers.set(id, rp)
+  }
+
+  _disconnect() {
+    if (this.net) { this.net.close(); this.net = null }
+    if (this.remotePlayers) {
+      for (const rp of this.remotePlayers.values()) rp.dispose()
+      this.remotePlayers.clear()
+    }
   }
 
   pause() {
@@ -201,11 +271,27 @@ export class Game {
         if (res.killed) this.hud.hitMarker(true)
         else if (res.hit) this.hud.hitMarker(false)
         if (res.barrel) this.explode(res.barrel)
+        // Broadcast the shot so other players see a tracer.
+        if (this.net) {
+          const aim = this.player.getAimRay()
+          const to = aim.origin.clone().addScaledVector(aim.dir, 60)
+          this.net.sendShoot([muzzle.x, muzzle.y, muzzle.z], [to.x, to.y, to.z])
+        }
       }
     }
 
     this.player.update(dt)
     this.particles.update(dt)
+
+    // Multiplayer: broadcast local state + interpolate remote players.
+    if (this.net) {
+      this.net.sendState({
+        x: this.player.position.x, y: this.player.position.y, z: this.player.position.z,
+        yaw: this.player.yaw, pitch: this.player.pitch, hp: this.player.hp,
+        wpn: this.weapons.index, moving: this.player.moving,
+      }, performance.now())
+      for (const rp of this.remotePlayers.values()) rp.update(dt, this.camera)
+    }
 
     // Fortnite-style dynamic reticle: bloom out when moving/firing/airborne.
     let spread = 0

@@ -1,9 +1,8 @@
 # 🔫 Toon Shooter
 
-A toon-style **third-person wave shooter** built with [Three.js](https://threejs.org/) and Vite.
-Single-player today; **multiplayer is planned** (see roadmap).
-
-![status](https://img.shields.io/badge/stage-single--player-yellow)
+A toon-style **first-person wave shooter** built with [Three.js](https://threejs.org/) and Vite,
+using the **Toon Shooter Game Kit** art. Single-player wave survival with an
+optional **online multiplayer** mode.
 
 ## Play
 
@@ -18,55 +17,68 @@ Click **PLAY**, then click the canvas to lock your mouse.
 | Key | Action |
 |-----|--------|
 | `WASD` | Move |
-| `Mouse` | Aim / camera |
-| `Left Click` | Shoot (hold for auto) |
+| `Mouse` | Aim |
+| `Left Click` | Shoot (hold for auto weapons) |
+| `Right Click` | Aim down sights (ADS) |
+| `1`–`5` / `Scroll` | Switch weapon (Pistol/AK/SMG/Shotgun/Sniper) |
 | `Shift` | Sprint |
 | `Space` | Jump |
 | `R` | Reload |
 | `Esc` | Pause |
 
-Survive endless waves — each wave brings more and tougher enemies. Score 10 per kill.
+Survive endless waves — enemies shoot at range and punch up close. Cover blocks
+bullets both ways. Shoot exploding barrels to clear groups. Score 10 per kill.
+
+## Multiplayer
+
+Multiplayer needs a small WebSocket relay server (GitHub Pages can't host one).
+
+**1. Run the server** (locally or on any Node host):
+
+```bash
+cd server
+npm install
+npm start         # listens on ws://localhost:8080 (PORT env to change)
+```
+
+**2. Connect** from the menu: enter a name + room, set the **server URL**, and
+click **PLAY ONLINE**. Players in the same room see and shoot alongside each
+other. You can also prefill the server via URL: `?server=wss://your-host`.
+
+**Hosting online:** deploy the `server/` folder to any Node + WebSocket host
+(Render, Railway, Fly.io, Glitch). Use a `wss://` URL when the client is served
+over HTTPS (e.g. GitHub Pages), or browsers will block the mixed connection.
+
+> The server is a lightweight **relay** (non-authoritative): clients broadcast
+> their own position/aim/shots. Great for seeing and shooting together; harden to
+> an authoritative server later for anti-cheat and synced enemies.
 
 ## Project structure
 
 ```
 src/
-  main.js              entry point
-  core/
-    Game.js            game loop, state machine, wiring
-    Input.js           keyboard/mouse + pointer lock
-    HUD.js             DOM HUD bindings
-    AssetLoader.js     GLTF loading + caching (drop-in models)
-  entities/
-    Player.js          third-person controller + camera rig
-    Enemy.js           chasing enemy + health bar
-  systems/
-    World.js           scene, lights, ground, arena, obstacles
-    Weapons.js         hitscan shooting + tracer/impact FX
-    Spawner.js         wave logic
-public/models/         put your Toon Shooter Game Kit .glb files here
+  core/      Game loop/state, Input, HUD, AssetLoader
+  entities/  Player (FPS), Enemy (ranged+melee AI), RemotePlayer, CharacterAnimator
+  systems/   World, LevelBuilder, Weapons, Spawner, Particles
+  net/       Net.js (client WebSocket layer)
+public/models/  Toon Shooter Game Kit glTF (characters / guns / env)
+server/         WebSocket relay server (own package.json, deploy separately)
 ```
-
-## Using the Toon Shooter Game Kit art
-
-The game runs with placeholder shapes out of the box. To use the real kit assets,
-export them to `.glb` and drop them in `public/models/` — see
-[`public/models/README.md`](public/models/README.md).
 
 ## Roadmap
 
-- [x] Core single-player loop (movement, shooting, waves)
-- [x] Real toon character + environment models (Toon Shooter Game Kit, animated)
-- [ ] Weapon variety, pickups, reload/recoil animations
-- [ ] Sound effects + music
-- [ ] **Multiplayer** — co-op / deathmatch (planned: authoritative Node server,
-      decide architecture once single-player feels good)
+- [x] First-person controller, shooting, waves
+- [x] Toon character + environment models (animated)
+- [x] Weapon variety (5 weapons), ADS, muzzle flash, reload
+- [x] Particles + exploding barrels, cover that blocks bullets
+- [x] Multiplayer foundation (relay server, remote players, shot sync)
+- [ ] Synced enemies + PvP damage (authoritative server)
+- [ ] Sound effects + music, pickups (Health/Ammo)
 
 ## Deploy
 
-Pushing to `main` auto-deploys to **GitHub Pages** via
+Pushing to `main` auto-deploys the client to **GitHub Pages** via
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
-Enable it in your repo: **Settings → Pages → Source: GitHub Actions**.
 
 ## License
 
