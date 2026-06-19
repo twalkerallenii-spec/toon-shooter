@@ -1,9 +1,12 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 
-// Loads and caches GLTF/GLB models. Drop your Toon Shooter Game Kit models into
-// /public/models/ and reference them by path (e.g. 'models/Character.glb').
+// Loads and caches GLTF/GLB models. The Toon Shooter Game Kit glTF files live in
+// /public/models/{characters,guns,env}. Buffers are embedded (data URIs), so no
+// companion .bin/texture files are needed.
 //
-// Returns a fresh clone each time so multiple entities can share one loaded model.
+// Returns a skeleton-safe clone each time (SkeletonUtils.clone) so multiple
+// animated entities can share one loaded asset without corrupting skinning.
 export class AssetLoader {
   constructor() {
     this.loader = new GLTFLoader()
@@ -17,14 +20,14 @@ export class AssetLoader {
     return gltf
   }
 
-  // Load a model and return a ready-to-add clone of its scene plus its animations.
-  // Falls back gracefully (returns null) if the file is missing, so the game can
-  // run with placeholder geometry until real assets are added.
+  // Load a model and return a ready-to-add clone of its scene plus its animation
+  // clips. Returns null if the file is missing so the game can fall back to
+  // placeholder geometry.
   async loadModel(path) {
     try {
       const gltf = await this.load(path)
       return {
-        scene: gltf.scene.clone(true),
+        scene: cloneSkinned(gltf.scene),
         animations: gltf.animations || [],
       }
     } catch (err) {

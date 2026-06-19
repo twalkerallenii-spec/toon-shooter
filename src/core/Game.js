@@ -68,11 +68,14 @@ export class Game {
     this._buildWorld()
     this.player = new Player({ world: this.world, input: this.input, camera: this.camera })
     this.weapons = new Weapons({ world: this.world })
-    this.spawner = new Spawner({ world: this.world })
+    this.spawner = new Spawner({ world: this.world, assets: this.assets })
     this.score = 0
 
     // HUD hooks
-    this.weapons.onFire = () => this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
+    this.weapons.onFire = () => {
+      this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
+      this.player.notifyFired() // drives the shoot animation + aim facing
+    }
     this.weapons.onReloadStart = () => this.hud.setReloading(true)
     this.weapons.onReloadEnd = () => {
       this.hud.setReloading(false)
@@ -95,9 +98,23 @@ export class Game {
   }
 
   async _loadOptionalModels() {
-    // Drop GLB/GLTF files into /public/models with these names to use them.
-    const playerModel = await this.assets.loadModel('models/player.glb')
-    if (playerModel) this.player.setModel(playerModel.scene)
+    // Toon Shooter Game Kit assets (glTF with embedded buffers).
+    const [soldier, gun, ...props] = await Promise.all([
+      this.assets.loadModel('models/characters/Character_Soldier.gltf'),
+      this.assets.loadModel('models/guns/AK.gltf'),
+      this.assets.loadModel('models/env/Crate.gltf'),
+      this.assets.loadModel('models/env/Barrier_Large.gltf'),
+      this.assets.loadModel('models/env/CardboardBoxes_1.gltf'),
+      this.assets.loadModel('models/env/Container_Small.gltf'),
+      this.assets.loadModel('models/env/ExplodingBarrel.gltf'),
+      this.assets.loadModel('models/env/SackTrench.gltf'),
+    ])
+
+    if (soldier) this.player.setModel(soldier.scene, soldier.animations, gun ? gun.scene : null)
+    this.world.addPropModels(props.filter(Boolean))
+
+    // Enemies are spawned over time, so the spawner clones this per enemy.
+    this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
   }
 
   start() {

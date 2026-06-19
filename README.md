@@ -56,7 +56,7 @@ export them to `.glb` and drop them in `public/models/` — see
 ## Roadmap
 
 - [x] Core single-player loop (movement, shooting, waves)
-- [ ] Real toon character + environment models
+- [x] Real toon character + environment models (Toon Shooter Game Kit, animated)
 - [ ] Weapon variety, pickups, reload/recoil animations
 - [ ] Sound effects + music
 - [ ] **Multiplayer** — co-op / deathmatch (planned: authoritative Node server,

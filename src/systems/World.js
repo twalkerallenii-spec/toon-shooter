@@ -60,24 +60,59 @@ export class World {
     this.scene.add(ring)
   }
 
-  // A few decorative blocks/crates as cover and visual interest. These also act
-  // as a stand-in until environment props from the asset kit are dropped in.
+  // Placeholder cover blocks, created immediately so collisions work before the
+  // kit props finish loading. addPropModels() later swaps in real models.
   _buildScenery() {
     this.obstacles = []
+    this.propSlots = [] // { x, z, radius, rotY } — filled deterministically
     const crateMat = new THREE.MeshStandardMaterial({ color: 0xb5651d, roughness: 0.9 })
     const rng = mulberry32(1337)
-    for (let i = 0; i < 14; i++) {
-      const size = 2 + rng() * 3
-      const geo = new THREE.BoxGeometry(size, size, size)
-      const m = new THREE.Mesh(geo, crateMat)
+    for (let i = 0; i < 16; i++) {
+      const size = 2 + rng() * 2
       const ang = rng() * Math.PI * 2
       const dist = 12 + rng() * (this.arenaRadius - 18)
-      m.position.set(Math.cos(ang) * dist, size / 2, Math.sin(ang) * dist)
-      m.rotation.y = rng() * Math.PI
+      const x = Math.cos(ang) * dist
+      const z = Math.sin(ang) * dist
+      const rotY = rng() * Math.PI
+      const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMat)
+      m.position.set(x, size / 2, z)
+      m.rotation.y = rotY
       m.castShadow = true
       m.receiveShadow = true
       this.scene.add(m)
-      this.obstacles.push({ mesh: m, radius: size * 0.7 })
+      const obstacle = { mesh: m, radius: size * 0.7 }
+      this.obstacles.push(obstacle)
+      this.propSlots.push({ x, z, rotY, obstacle, placeholder: m })
+    }
+  }
+
+  // Replace placeholder boxes with real kit prop models. `props` is an array of
+  // { scene } loaded models; they're distributed across the prop slots and
+  // auto-scaled to roughly fill each slot footprint.
+  addPropModels(props) {
+    if (!props || !props.length) return
+    let i = 0
+    for (const slot of this.propSlots) {
+      const proto = props[i % props.length]
+      i++
+      if (!proto || !proto.scene) continue
+      const model = proto.scene
+      // Scale prop so its larger horizontal footprint ~= the slot.
+      const box = new THREE.Box3().setFromObject(model)
+      const size = new THREE.Vector3(); box.getSize(size)
+      const footprint = Math.max(size.x, size.z) || 1
+      const targetFootprint = slot.obstacle.radius * 2
+      model.scale.setScalar(targetFootprint / footprint)
+
+      const box2 = new THREE.Box3().setFromObject(model)
+      const center = new THREE.Vector3(); box2.getCenter(center)
+      model.position.set(slot.x - center.x, -box2.min.y, slot.z - center.z)
+      model.rotation.y = slot.rotY
+      model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true } })
+
+      this.scene.add(model)
+      this.scene.remove(slot.placeholder)
+      slot.obstacle.mesh = model // raycast against the real prop now
     }
   }
 

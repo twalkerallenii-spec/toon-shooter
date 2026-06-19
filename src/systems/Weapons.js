@@ -54,12 +54,13 @@ export class Weapons {
     this.raycaster.set(aim.origin, dir)
     this.raycaster.far = this.range
 
-    // Collect candidate meshes: enemies + obstacles.
+    // Collect candidate objects: enemy hit-capsules + obstacle props (Groups).
     const meshes = []
     for (const t of targets) if (t.alive && t.hitMesh) meshes.push(t.hitMesh)
     for (const o of this.world.obstacles) meshes.push(o.mesh)
 
-    const hits = this.raycaster.intersectObjects(meshes, false)
+    // Recursive: obstacle props are Groups with child meshes.
+    const hits = this.raycaster.intersectObjects(meshes, true)
     let endPoint = aim.origin.clone().addScaledVector(dir, this.range)
     let killed = false
 

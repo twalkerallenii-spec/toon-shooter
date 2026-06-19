@@ -1,41 +1,40 @@
 import * as THREE from 'three'
+import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 
 const TMP = new THREE.Vector3()
 const FORWARD = new THREE.Vector3()
 const RIGHT = new THREE.Vector3()
 
 // Third-person player: an orbit-style camera looks over the character's shoulder.
-// Movement is relative to the camera yaw. Includes gravity/jump and shooting
-// driven from where the camera is aiming (screen-center raycast).
+// Movement is relative to the camera yaw. Includes gravity/jump, shooting driven
+// from the camera aim, and an animated character model (Toon Shooter Game Kit).
 export class Player {
   constructor({ world, input, camera }) {
     this.world = world
     this.input = input
     this.camera = camera
 
-    // Placeholder character mesh (replaced by a GLTF toon model via setModel()).
+    // Container for the character. A child "yaw pivot" lets the model face its
+    // own direction independent of the camera.
     this.group = new THREE.Group()
+    this.modelPivot = new THREE.Group()
+    this.group.add(this.modelPivot)
+
+    // Placeholder (used until the GLTF model loads).
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3da9fc, roughness: 0.7 })
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.0, 6, 12), bodyMat)
-    body.position.y = 1.0
-    body.castShadow = true
-    this.group.add(body)
-    // Little "nose" so facing direction is visible on the placeholder.
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(0.25, 0.25, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0xffcb3d })
-    )
-    nose.position.set(0, 1.3, 0.55)
-    this.group.add(nose)
-    this.placeholder = body
+    this.placeholder = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.0, 6, 12), bodyMat)
+    this.placeholder.position.y = 1.0
+    this.placeholder.castShadow = true
+    this.modelPivot.add(this.placeholder)
 
     // State
     this.position = this.group.position
     this.velocity = new THREE.Vector3()
-    this.yaw = 0       // facing / camera horizontal angle
+    this.yaw = 0       // camera horizontal angle
     this.pitch = 0.25  // camera vertical angle
+    this.facing = 0    // model facing angle (smoothed)
     this.onGround = true
-    this.height = 1.7
+    this.targetHeight = 1.8
 
     // Stats
     this.maxHp = 100
@@ -53,16 +52,52 @@ export class Player {
     this.camDistance = 6
     this.camHeight = 2.2
 
+    // Animation
+    this.animator = null
+    this.shootingTimer = 0 // keeps shoot pose briefly after firing
+
     world.scene.add(this.group)
   }
 
-  // Swap the placeholder for a loaded GLTF model (keeps the same transform group).
-  setModel(modelScene) {
-    if (!modelScene) return
-    this.group.remove(this.placeholder)
-    modelScene.traverse((o) => { if (o.isMesh) o.castShadow = true })
-    this.group.add(modelScene)
-    this.model = modelScene
+  // Install the animated GLTF character (scene + clips) and attach a gun model.
+  setModel(scene, clips, gunScene) {
+    if (!scene) return
+    this.modelPivot.remove(this.placeholder)
+    scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
+    normalizeModel(scene, this.targetHeight)
+    this.modelPivot.add(scene)
+    this.model = scene
+
+    if (clips && clips.length) {
+      this.animator = new CharacterAnimator(scene, clips)
+      this.animator.play('Idle', { fade: 0 })
+    }
+
+    if (gunScene) this._attachGun(scene, gunScene)
+  }
+
+  // Attach a gun to the right-hand bone if we can find one, else to the body.
+  _attachGun(characterScene, gunScene) {
+    let hand = null
+    characterScene.traverse((o) => {
+      if (hand) return
+      const n = (o.name || '').toLowerCase()
+      if (o.isBone && (n.includes('hand') && (n.includes('r') || n.includes('right')))) hand = o
+    })
+    gunScene.traverse((o) => { if (o.isMesh) o.castShadow = true })
+
+    if (hand) {
+      // Bone space is scaled by the normalized character; counter-scale the gun.
+      gunScene.scale.setScalar(1)
+      gunScene.position.set(0, 0, 0)
+      hand.add(gunScene)
+    } else {
+      // Fallback: park it at the right hip so the player is visibly armed.
+      gunScene.scale.setScalar(0.5)
+      gunScene.position.set(0.35, 1.1, 0.2)
+      this.modelPivot.add(gunScene)
+    }
+    this.gun = gunScene
   }
 
   takeDamage(amount) {
@@ -70,11 +105,16 @@ export class Player {
     this.hp = Math.max(0, this.hp - amount)
     if (this.hp <= 0) {
       this.alive = false
+      this.animator?.play('Death', { once: true, fade: 0.15 })
+    } else {
+      this.animator?.playOnceThen('HitReact', this._baseClip())
     }
   }
 
-  // Returns the world-space aim ray (origin + normalized direction) from the
-  // camera through screen center — used by the shooting system.
+  notifyFired() {
+    this.shootingTimer = 0.25
+  }
+
   getAimRay() {
     const origin = new THREE.Vector3()
     this.camera.getWorldPosition(origin)
@@ -87,18 +127,18 @@ export class Player {
     if (this.alive) this._handleLook()
     this._handleMove(dt)
     this._updateCamera()
+    if (this.shootingTimer > 0) this.shootingTimer -= dt
+    this._updateAnimation(dt)
   }
 
   _handleLook() {
     const { dx, dy } = this.input.consumeMouseDelta()
     this.yaw -= dx * this.mouseSensitivity
     this.pitch -= dy * this.mouseSensitivity
-    // Clamp pitch so the camera can't flip over.
     this.pitch = Math.max(-0.4, Math.min(1.2, this.pitch))
   }
 
   _handleMove(dt) {
-    // Camera-relative basis on the ground plane.
     FORWARD.set(Math.sin(this.yaw), 0, Math.cos(this.yaw))
     RIGHT.set(FORWARD.z, 0, -FORWARD.x)
 
@@ -116,36 +156,39 @@ export class Player {
     TMP.set(0, 0, 0)
     TMP.addScaledVector(FORWARD, iz)
     TMP.addScaledVector(RIGHT, ix)
-    if (TMP.lengthSq() > 0) {
+    this.moving = TMP.lengthSq() > 0
+    this.sprinting = sprint && this.moving
+
+    if (this.moving) {
       TMP.normalize()
-      // Face the movement direction (character turns toward where it walks).
-      const targetAngle = Math.atan2(TMP.x, TMP.z)
-      this.group.rotation.y = lerpAngle(this.group.rotation.y, targetAngle, 0.2)
+      // While shooting, face the camera/aim direction; otherwise face movement.
+      const target = this.shootingTimer > 0 ? this.yaw : Math.atan2(TMP.x, TMP.z)
+      this.facing = lerpAngle(this.facing, target, 0.25)
+    } else if (this.shootingTimer > 0) {
+      this.facing = lerpAngle(this.facing, this.yaw, 0.25)
     }
+    this.modelPivot.rotation.y = this.facing
 
     this.velocity.x = TMP.x * speed
     this.velocity.z = TMP.z * speed
 
-    // Jump + gravity
     if (this.alive && this.onGround && this.input.isDown('Space')) {
       this.velocity.y = this.jumpSpeed
       this.onGround = false
+      this.animator?.play('Jump', { once: true, fade: 0.1 })
     }
     this.velocity.y += this.gravity * dt
 
-    // Integrate
     this.position.x += this.velocity.x * dt
     this.position.y += this.velocity.y * dt
     this.position.z += this.velocity.z * dt
 
-    // Ground collision
     if (this.position.y <= this.world.groundY) {
       this.position.y = this.world.groundY
       this.velocity.y = 0
       this.onGround = true
     }
 
-    // Obstacle collision (simple circle push-out)
     for (const o of this.world.obstacles) {
       const dx = this.position.x - o.mesh.position.x
       const dz = this.position.z - o.mesh.position.z
@@ -161,8 +204,28 @@ export class Player {
     this.world.clampToArena(this.position)
   }
 
+  _baseClip() {
+    if (!this.animator) return 'Idle'
+    if (this.moving) {
+      if (this.shootingTimer > 0 && this.animator.has('Run_Shoot')) return 'Run_Shoot'
+      if (this.sprinting && this.animator.has('Run')) return 'Run'
+      if (this.animator.has('Run')) return 'Run'
+      if (this.animator.has('Walk')) return 'Walk'
+    }
+    if (this.shootingTimer > 0 && this.animator.has('Idle_Shoot')) return 'Idle_Shoot'
+    return 'Idle'
+  }
+
+  _updateAnimation(dt) {
+    if (!this.animator) return
+    if (this.alive) {
+      // Don't interrupt a one-shot jump/hit react that's mid-air.
+      if (this.onGround) this.animator.play(this._baseClip(), { fade: 0.15 })
+    }
+    this.animator.update(dt)
+  }
+
   _updateCamera() {
-    // Orbit camera around the player based on yaw/pitch.
     const cx = Math.sin(this.yaw) * Math.cos(this.pitch)
     const cy = Math.sin(this.pitch)
     const cz = Math.cos(this.yaw) * Math.cos(this.pitch)
@@ -178,7 +241,6 @@ export class Player {
       target.y + cy * this.camDistance,
       target.z - cz * this.camDistance
     )
-    // Keep camera above ground.
     if (this.camera.position.y < 0.6) this.camera.position.y = 0.6
     this.camera.lookAt(target)
   }
