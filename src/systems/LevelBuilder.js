@@ -174,6 +174,7 @@ export class LevelBuilder {
       }))
     }
 
+    jobs.push(this._detail(HALF, 101))
     await Promise.all(jobs)
   }
 
@@ -220,6 +221,7 @@ export class LevelBuilder {
     for (let i = 0; i < 30; i++) {
       jobs.push(this.place(deco[i % deco.length], { x: (rng() - 0.5) * 72, z: (rng() - 0.5) * 72, rotY: rng() * TAU }))
     }
+    jobs.push(this._detail(this.world.arenaRadius, 202))
     await Promise.all(jobs)
   }
 
@@ -264,6 +266,56 @@ export class LevelBuilder {
     }
     for (let i = 0; i < 5; i++) {
       jobs.push(this.place('ExplodingBarrel', { x: (rng() - 0.5) * 50, z: (rng() - 0.5) * 50, solid: true, radiusMul: 0.9, barrel: true }))
+    }
+    jobs.push(this._detail(this.world.arenaRadius, 303))
+    await Promise.all(jobs)
+  }
+
+  // Shared extra detail layered onto every map: dense ground clutter, sandbag
+  // walls, and a few climbable crate stacks (good for vaulting).
+  async _detail(HALF, seed = 1) {
+    const rng = mulberry32(seed)
+    const TAU = Math.PI * 2
+    const jobs = []
+
+    // Lots of small ground decoration so the field feels lived-in.
+    const deco = ['Debris_Papers_1', 'Debris_Papers_2', 'Debris_Papers_3', 'Debris_Tires',
+      'Debris_Pile', 'TrafficCone', 'WoodPlanks', 'Pallet_Broken', 'Pipes', 'GasCan',
+      'Sign', 'BearTrap_Closed']
+    for (let i = 0; i < 44; i++) {
+      jobs.push(this.place(deco[i % deco.length], {
+        x: (rng() - 0.5) * HALF * 1.9, z: (rng() - 0.5) * HALF * 1.9, rotY: rng() * TAU,
+      }))
+    }
+
+    // Street lights around the field.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU
+      jobs.push(this.place('StreetLight', { x: Math.cos(a) * (HALF - 8), z: Math.sin(a) * (HALF - 8), rotY: a + Math.PI }))
+    }
+
+    // Sandbag walls (rows) for extra cover lines.
+    const sgProto = await this._load('SackTrench')
+    const sgW = sgProto ? Math.max(measureWidth(sgProto), 1.5) : 2
+    const walls = [
+      { x: -18, z: 6, dx: 1, dz: 0, n: 4 }, { x: 16, z: -8, dx: 0, dz: 1, n: 3 },
+      { x: 6, z: 18, dx: 1, dz: 0, n: 3 },
+    ]
+    for (const w of walls) {
+      const ang = Math.atan2(w.dx, w.dz)
+      for (let i = 0; i < w.n; i++) {
+        jobs.push(this.place('SackTrench', {
+          x: w.x + w.dx * sgW * i, z: w.z + w.dz * sgW * i, rotY: ang, solid: true, radiusMul: 0.6,
+        }))
+      }
+    }
+
+    // Climbable crate stacks (vault up them).
+    const stacks = [{ x: -8, z: -8 }, { x: 12, z: 10 }, { x: 20, z: -16 }]
+    for (const s of stacks) {
+      jobs.push(this.place('Crate', { x: s.x, z: s.z, solid: true }))
+      jobs.push(this.place('Crate', { x: s.x, z: s.z, baseY: 2.0, solid: true }))
+      jobs.push(this.place('Crate', { x: s.x + 2.1, z: s.z + 0.3, solid: true }))
     }
     await Promise.all(jobs)
   }

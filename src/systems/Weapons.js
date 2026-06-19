@@ -7,6 +7,7 @@ export const WEAPONS = [
   { key: 'SMG',     model: 'SMG',     damage: 17, fireRate: 14, mag: 30, spread: 0.030, pellets: 1, auto: true,  range: 160, reload: 1.3, adsFov: 55, recoil: 0.035 },
   { key: 'Shotgun', model: 'Shotgun', damage: 13, fireRate: 1.4, mag: 6, spread: 0.10,  pellets: 9, auto: false, range: 70,  reload: 0.9, adsFov: 60, recoil: 0.12 },
   { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16 },
+  { key: 'GL',      model: 'GrenadeLauncher', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
 ]
 
 // Hitscan shooting for a roster of weapons + lightweight combat FX (tracers,
@@ -69,6 +70,15 @@ export class Weapons {
     this.ammo -= 1
     this._cooldown = 1 / def.fireRate
     this.onFire?.()
+
+    const start0 = muzzlePos ? muzzlePos.clone() : aim.origin.clone().addScaledVector(aim.dir, 1.2)
+
+    // Projectile weapons (grenade launcher): no hitscan — caller spawns a shell.
+    if (def.projectile) {
+      this.flash(start0, 0xffd24a)
+      if (this.ammo <= 0) this.startReload()
+      return { fired: true, hit: false, killed: false, barrel: null, playerHit: null, projectile: def.projectile, origin: start0, dir: aim.dir.clone() }
+    }
 
     const meshes = []
     for (const t of targets) if (t.alive && t.hitMesh) meshes.push(t.hitMesh)

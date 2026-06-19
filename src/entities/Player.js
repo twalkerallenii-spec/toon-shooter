@@ -44,6 +44,8 @@ export class Player {
     this.bobT = 0
     this.recoil = 0
     this.shootingTimer = 0
+    this._spacePrev = false
+    this._vaultCd = 0
 
     // Aim-down-sights
     this.adsActive = false
@@ -205,7 +207,16 @@ export class Player {
     this.velocity.x = TMP.x * speed
     this.velocity.z = TMP.z * speed
 
-    if (this.alive && this.onGround && this.input.isDown('Space')) {
+    // Jump / vault on Space. A fresh press near a ledge vaults onto it; otherwise
+    // it's a normal ground jump.
+    const spaceDown = this.input.isDown('Space')
+    const spacePressed = spaceDown && !this._spacePrev
+    this._spacePrev = spaceDown
+    if (this._vaultCd > 0) this._vaultCd -= dt
+
+    if (this.alive && spacePressed && this._vaultCd <= 0 && this._tryVault()) {
+      // handled by vault
+    } else if (this.alive && this.onGround && spaceDown) {
       this.velocity.y = this.jumpSpeed
       this.onGround = false
     }
@@ -229,6 +240,34 @@ export class Player {
         }
       }
     }
+  }
+
+  // Climb/vault: if a low-enough ledge is right in front of the player, hop on
+  // top of it. Returns true if it vaulted.
+  _tryVault() {
+    const r = 0.5, mantleMax = 2.4
+    const p = this.position
+    let best = null
+    for (const b of this.world.platforms) {
+      if (!b.climbable) continue
+      const rise = b.top - p.y
+      if (rise < 0.4 || rise > mantleMax) continue // too low (just step) or too tall
+      // Horizontal proximity to the box footprint.
+      const cx = Math.max(b.minX, Math.min(p.x, b.maxX))
+      const cz = Math.max(b.minZ, Math.min(p.z, b.maxZ))
+      const d = Math.hypot(p.x - cx, p.z - cz)
+      if (d > r + 0.6) continue
+      if (!best || b.top < best.top) best = b
+    }
+    if (!best) return false
+    // Place the player on top, just inside the ledge.
+    p.x = Math.max(best.minX + 0.3, Math.min(p.x, best.maxX - 0.3))
+    p.z = Math.max(best.minZ + 0.3, Math.min(p.z, best.maxZ - 0.3))
+    p.y = best.top + 0.02
+    this.velocity.y = 0
+    this.onGround = true
+    this._vaultCd = 0.35
+    return true
   }
 
   // AABB collision against world.platforms: block walls horizontally, and let the

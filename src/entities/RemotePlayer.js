@@ -4,8 +4,9 @@ import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 // A networked other-player avatar: the animated soldier model with a name tag and
 // HP bar, smoothly interpolated toward the latest networked state.
 export class RemotePlayer {
-  constructor({ world, assets, name, id }) {
+  constructor({ world, assets, name, id, fx = null }) {
     this.world = world
+    this.fx = fx
     this.name = name
     this.id = id
     this.group = new THREE.Group()
@@ -15,6 +16,11 @@ export class RemotePlayer {
     this.targetYaw = 0
     this.moving = false
     this.hp = 100
+
+    // Drop-in: new players skydive down from above with a landing puff.
+    this.dropOffset = 16
+    this.landed = false
+    this._gotState = false
 
     // Invisible capsule used for PvP bullet raycasts.
     this.hitMesh = new THREE.Mesh(
@@ -71,6 +77,11 @@ export class RemotePlayer {
   setState(p) {
     if (!p) return
     this.target.set(p.x, p.y, p.z)
+    // First state: snap above the real spot so the drop-in starts there, not at origin.
+    if (!this._gotState) {
+      this._gotState = true
+      this.group.position.set(p.x, p.y + this.dropOffset, p.z)
+    }
     this.targetYaw = p.yaw ?? 0
     this.moving = !!p.moving
     if (typeof p.hp === 'number') {
@@ -82,12 +93,31 @@ export class RemotePlayer {
   }
 
   update(dt, camera) {
-    // Smoothly chase the networked target.
-    this.group.position.lerp(this.target, Math.min(1, dt * 12))
-    this.modelPivot.rotation.y = lerpAngle(this.modelPivot.rotation.y, this.targetYaw, Math.min(1, dt * 12))
+    const k = Math.min(1, dt * 12)
+    // Horizontal chase toward the networked target.
+    this.group.position.x += (this.target.x - this.group.position.x) * k
+    this.group.position.z += (this.target.z - this.group.position.z) * k
+
+    // Vertical: descend the drop-in offset, then follow the target height.
+    let dropping = false
+    if (this.dropOffset > 0.02) {
+      dropping = true
+      this.dropOffset = Math.max(0, this.dropOffset - dt * 22)
+      this.group.position.y = this.target.y + this.dropOffset
+      if (this.dropOffset <= 0.02 && !this.landed) {
+        this.landed = true
+        this.fx?.emit(this.group.position, 24, { color: [0.7, 0.65, 0.5], speed: 6, size: 1.4, life: 0.5, gravity: -3, up: 2 })
+      }
+    } else {
+      this.group.position.y += (this.target.y - this.group.position.y) * k
+    }
+
+    this.modelPivot.rotation.y = lerpAngle(this.modelPivot.rotation.y, this.targetYaw, k)
 
     if (this.animator) {
-      this.animator.play(this.moving ? 'Run' : 'Idle', { fade: 0.18 })
+      const clip = dropping ? (this.animator.has('Jump_Idle') ? 'Jump_Idle' : 'Jump')
+        : (this.moving ? 'Run' : 'Idle')
+      this.animator.play(clip, { fade: 0.18 })
       this.animator.update(dt)
     }
     if (camera) {

@@ -53,7 +53,7 @@ export class HUD {
   }
 
   setWeapon(def, index) {
-    this.el.weaponName.textContent = def.key
+    this.el.weaponName.textContent = def.label || def.key
     if (this._wpnEls) {
       this._wpnEls.forEach((el, i) => el.classList.toggle('active', i === index))
     }

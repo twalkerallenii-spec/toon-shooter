@@ -300,7 +300,7 @@ export class Game {
 
   _addRemote(id, name, state, team) {
     if (this.remotePlayers.has(id)) return
-    const rp = new RemotePlayer({ world: this.world, assets: this.assets, name, id })
+    const rp = new RemotePlayer({ world: this.world, assets: this.assets, name, id, fx: this.particles })
     rp.team = team
     if (state) rp.setState(state)
     rp.setTeamColor(this._relationTo(team))
@@ -446,6 +446,14 @@ export class Game {
           }
         }
         if (res.barrel) this.explode(res.barrel)
+        // Grenade launcher: fire an explosive shell along the aim.
+        if (res.projectile === 'grenade') {
+          const v = res.dir.clone().multiplyScalar(42); v.y += 2
+          this.grenades.push(new Grenade({
+            world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 1.4,
+            onExplode: (p) => this.explodeAt(p, { radius: 8, damage: 120 }),
+          }))
+        }
         // Broadcast the shot so other players see a tracer.
         if (this.net) {
           const aim = this.player.getAimRay()

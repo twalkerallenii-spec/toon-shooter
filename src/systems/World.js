@@ -110,6 +110,14 @@ export class World {
       })
 
       if (barrel) {
+        // Make explosive barrels glow a little so they read as hazards.
+        scene.traverse((o) => {
+          if (o.isMesh && o.material) {
+            o.material = o.material.clone()
+            o.material.emissive = new THREE.Color(0xff3a00)
+            o.material.emissiveIntensity = 0.6
+          }
+        })
         const record = { group: scene, obstacle, x, z, radius: obstacle.radius, alive: true }
         scene.userData.barrel = record
         this.barrels.push(record)
