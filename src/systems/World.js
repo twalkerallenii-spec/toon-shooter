@@ -12,6 +12,7 @@ export class World {
     this.arenaRadius = 42 // half-extent of the square arena (kept name for callers)
     this.groundY = 0
     this.obstacles = []
+    this.barrels = [] // explodable barrels: { group, obstacle, x, z, radius, alive }
 
     this._buildLights()
     this._buildGround()
@@ -62,7 +63,7 @@ export class World {
   //   radiusMul  shrink/grow the collider relative to footprint (default 0.8)
   //   groundOffset extra lift off the ground (default 0)
   // Returns the placed model (Object3D), or null if model missing.
-  placeModel(scene, { x = 0, z = 0, rotY = 0, scale = 1, solid = false, radiusMul = 0.8, groundOffset = 0 } = {}) {
+  placeModel(scene, { x = 0, z = 0, rotY = 0, scale = 1, solid = false, radiusMul = 0.8, groundOffset = 0, barrel = false } = {}) {
     if (!scene) return null
     scene.scale.setScalar(scale)
     scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false } })
@@ -78,9 +79,23 @@ export class World {
 
     if (solid) {
       const footprint = Math.max(size.x, size.z) || 1
-      this.obstacles.push({ mesh: scene, radius: (footprint / 2) * radiusMul, x, z })
+      const obstacle = { mesh: scene, radius: (footprint / 2) * radiusMul, x, z }
+      this.obstacles.push(obstacle)
+      if (barrel) {
+        const record = { group: scene, obstacle, x, z, radius: obstacle.radius, alive: true }
+        scene.userData.barrel = record
+        this.barrels.push(record)
+      }
     }
     return scene
+  }
+
+  // Remove a barrel's mesh + collider after it explodes.
+  removeBarrel(record) {
+    record.alive = false
+    this.scene.remove(record.group)
+    const oi = this.obstacles.indexOf(record.obstacle)
+    if (oi >= 0) this.obstacles.splice(oi, 1)
   }
 
   // Square clamp: keep a position inside the arena bounds.

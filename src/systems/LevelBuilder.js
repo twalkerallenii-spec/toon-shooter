@@ -121,7 +121,7 @@ export class LevelBuilder {
       const d = Math.hypot(x, z)
       if (d < 8) { x = (x / d) * 8; z = (z / d) * 8 }
       jobs.push(this.place(rng() < 0.5 ? 'ExplodingBarrel' : 'ExplodingBarrel_Spilled', {
-        x, z, solid: true, radiusMul: 0.9,
+        x, z, solid: true, radiusMul: 0.9, barrel: true,
       }))
     }
 

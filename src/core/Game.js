@@ -5,6 +5,7 @@ import { AssetLoader } from './AssetLoader.js'
 import { World } from '../systems/World.js'
 import { Weapons } from '../systems/Weapons.js'
 import { Spawner } from '../systems/Spawner.js'
+import { Particles } from '../systems/Particles.js'
 import { Player } from '../entities/Player.js'
 
 // Game states
@@ -67,8 +68,9 @@ export class Game {
   _resetGameObjects() {
     // Fresh world each run so old enemies/effects are gone.
     this._buildWorld()
+    this.particles = new Particles(this.world.scene)
     this.player = new Player({ world: this.world, input: this.input, camera: this.camera })
-    this.weapons = new Weapons({ world: this.world })
+    this.weapons = new Weapons({ world: this.world, particles: this.particles })
     this.spawner = new Spawner({ world: this.world, assets: this.assets, weapons: this.weapons })
     this.score = 0
 
@@ -160,10 +162,12 @@ export class Game {
         firedThisFrame = true
         if (res.killed) this.hud.hitMarker(true)
         else if (res.hit) this.hud.hitMarker(false)
+        if (res.barrel) this.explode(res.barrel)
       }
     }
 
     this.player.update(dt)
+    this.particles.update(dt)
 
     // Fortnite-style dynamic reticle: bloom out when moving/firing/airborne.
     let spread = 0
@@ -182,6 +186,42 @@ export class Game {
     }
 
     this.renderer.render(this.world.scene, this.camera)
+  }
+
+  // Explode a barrel: particle FX, area damage to enemies + player, and chain
+  // reactions to nearby barrels.
+  explode(barrel, depth = 0) {
+    if (!barrel.alive) return
+    this.world.removeBarrel(barrel)
+
+    const pos = new THREE.Vector3(barrel.x, 1.0, barrel.z)
+    // Fireball + sparks + smoke.
+    this.particles.emit(pos, 64, { color: [1, 0.55, 0.12], speed: 15, spread: 11, size: 2.4, life: 0.5, gravity: -2, drag: 3, up: 4 })
+    this.particles.emit(pos, 28, { color: [1, 0.92, 0.45], speed: 22, spread: 14, size: 1.0, life: 0.32, gravity: -2, drag: 4 })
+    this.particles.emit(pos, 40, { color: [0.18, 0.18, 0.18], speed: 6, spread: 5, size: 3.6, life: 1.2, gravity: 1.4, drag: 1.4, up: 3 })
+    this.weapons.impact(pos, 0xffa030) // bright flash sphere
+
+    const R = 9 // blast radius
+    for (const e of this.spawner.enemies) {
+      if (!e.alive) continue
+      const d = Math.hypot(e.group.position.x - pos.x, e.group.position.z - pos.z)
+      if (d < R) {
+        const killed = e.takeHit(140 * (1 - d / R))
+        if (killed) { this.score += 10; this.hud.setScore(this.score) }
+      }
+    }
+    const pd = Math.hypot(this.player.position.x - pos.x, this.player.position.z - pos.z)
+    if (pd < R && this.player.alive) this.player.takeDamage(50 * (1 - pd / R))
+
+    // Chain nearby barrels (slight depth cap to avoid runaway recursion).
+    if (depth < 6) {
+      for (const b of this.world.barrels) {
+        if (b.alive) {
+          const d = Math.hypot(b.x - pos.x, b.z - pos.z)
+          if (d < R + b.radius) this.explode(b, depth + 1)
+        }
+      }
+    }
   }
 
   _renderOnce() {

@@ -3,9 +3,10 @@ import * as THREE from 'three'
 // Hitscan shooting + lightweight visual effects (tracers, muzzle flash, impact
 // sparks). Keeps short-lived effect meshes in a list and fades them each frame.
 export class Weapons {
-  constructor({ world }) {
+  constructor({ world, particles = null }) {
     this.world = world
     this.scene = world.scene
+    this.particles = particles
     this.raycaster = new THREE.Raycaster()
     this.effects = [] // { mesh, life, maxLife, fade }
 
@@ -66,6 +67,7 @@ export class Weapons {
     let endPoint = aim.origin.clone().addScaledVector(dir, this.range)
     let killed = false
     let hitEnemy = false
+    let barrel = null
 
     if (hits.length) {
       const hit = hits[0]
@@ -75,8 +77,13 @@ export class Weapons {
         killed = enemy.takeHit(this.damage)
         hitEnemy = true
         this.impact(hit.point, 0xff5555)
+        this.particles?.emit(hit.point, 8, { color: [1, 0.25, 0.2], speed: 5, size: 0.6, life: 0.35 })
       } else {
-        this.impact(hit.point, 0xffe08a)
+        barrel = findBarrel(hit.object) // shooting a barrel triggers an explosion
+        if (!barrel) {
+          this.impact(hit.point, 0xffe08a)
+          this.particles?.emit(hit.point, 5, { color: [1, 0.85, 0.4], speed: 4, size: 0.4, life: 0.25 })
+        }
       }
     }
 
@@ -86,7 +93,7 @@ export class Weapons {
     this.flash(start, 0xffd24a)
     if (this.ammo <= 0) this.startReload()
 
-    return { fired: true, hit: hitEnemy, killed }
+    return { fired: true, hit: hitEnemy, killed, barrel }
   }
 
   // ---- Public combat FX (used by the player weapon and by enemies) --------
@@ -109,6 +116,9 @@ export class Weapons {
   flash(pos, color = 0xffd24a) {
     this._spawnMuzzleFlash(pos, color)
   }
+
+  // Emit particles via the shared system (no-op if none wired).
+  emit(...args) { this.particles?.emit(...args) }
 
   _spawnMuzzleFlash(pos, color = 0xffd24a) {
     const geo = new THREE.SphereGeometry(0.22, 8, 8)
@@ -154,4 +164,14 @@ export class Weapons {
       }
     }
   }
+}
+
+// Walk up from a hit mesh to find an owning barrel record (set in World).
+function findBarrel(obj) {
+  let o = obj
+  while (o) {
+    if (o.userData && o.userData.barrel && o.userData.barrel.alive) return o.userData.barrel
+    o = o.parent
+  }
+  return null
 }
