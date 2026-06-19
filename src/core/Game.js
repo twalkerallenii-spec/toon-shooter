@@ -68,6 +68,8 @@ export class Game {
   _resetGameObjects() {
     // Fresh world each run so old enemies/effects are gone.
     this._buildWorld()
+    // Camera must be in the scene graph so the FPS viewmodel (its child) renders.
+    this.world.scene.add(this.camera)
     this.particles = new Particles(this.world.scene)
     this.player = new Player({ world: this.world, input: this.input, camera: this.camera })
     this.weapons = new Weapons({ world: this.world, particles: this.particles })
@@ -101,9 +103,9 @@ export class Game {
   }
 
   async _loadOptionalModels() {
-    // Player character (no gun mounted — held weapon removed per design).
-    const soldier = await this.assets.loadModel('models/characters/Character_Soldier.gltf')
-    if (soldier) this.player.setModel(soldier.scene, soldier.animations, null)
+    // First-person gun viewmodel (the kit AK), mounted to the camera.
+    const ak = await this.assets.loadModel('models/guns/AK.gltf')
+    if (ak) this.player.setViewmodel(ak.scene)
 
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'

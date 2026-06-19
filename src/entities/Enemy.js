@@ -4,6 +4,8 @@ import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 const TMP = new THREE.Vector3()
 const MUZZLE = new THREE.Vector3()
 const TARGET = new THREE.Vector3()
+const LOS_DIR = new THREE.Vector3()
+const RAY = new THREE.Raycaster()
 
 // An enemy that SHOOTS at range and only punches in close combat. Uses the Toon
 // Shooter Game Kit's animated enemy model (no visible capsule placeholder).
@@ -142,15 +144,24 @@ export class Enemy {
     MUZZLE.set(this.group.position.x, this.group.position.y + 1.3, this.group.position.z)
     MUZZLE.addScaledVector(TMP, 0.6) // a little in front of the chest
     TARGET.set(player.position.x, player.position.y + 1.2, player.position.z)
-    // Enemy tracer (reddish).
-    this.fx?.beam(MUZZLE, TARGET, 0xff6b4a, 0.05)
+
+    // Line of sight: if cover is between us and the player, the shot is blocked.
+    LOS_DIR.subVectors(TARGET, MUZZLE)
+    const dist = LOS_DIR.length()
+    LOS_DIR.normalize()
+    RAY.set(MUZZLE, LOS_DIR)
+    RAY.far = dist
+    const meshes = this.world.obstacles.map((o) => o.mesh)
+    const hits = RAY.intersectObjects(meshes, true)
     this.fx?.flash(MUZZLE, 0xff8a5a)
-    if (Math.random() < this.shootAccuracy) {
-      player.takeDamage(this.shootDamage)
+    if (hits.length && hits[0].distance < dist - 0.4) {
+      // Blocked: tracer terminates at the cover, no damage.
+      this.fx?.beam(MUZZLE, hits[0].point, 0xff6b4a, 0.05)
+      return
     }
-    if (this.animator?.has('Idle_Shoot') && !this._isRunShooting()) {
-      // a brief shoot pose pulse if currently idle
-    }
+    // Clear shot.
+    this.fx?.beam(MUZZLE, TARGET, 0xff6b4a, 0.05)
+    if (Math.random() < this.shootAccuracy) player.takeDamage(this.shootDamage)
   }
 
   _isRunShooting() {
