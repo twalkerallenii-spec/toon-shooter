@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { Input } from './Input.js'
 import { HUD } from './HUD.js'
+import { MobileControls } from './MobileControls.js'
 import { AssetLoader } from './AssetLoader.js'
 import { World } from '../systems/World.js'
 import { Weapons } from '../systems/Weapons.js'
@@ -50,6 +51,12 @@ export class Game {
     this.input = new Input(canvas)
     this.hud = new HUD()
     this.assets = new AssetLoader()
+
+    // Touch devices: on-screen controls + no pointer lock.
+    if (this.input.isTouch) {
+      document.body.classList.add('touch')
+      this.mobile = new MobileControls(this.input)
+    }
 
     this._wireUI()
     this._onResize = () => this._resize()
@@ -105,8 +112,8 @@ export class Game {
     invert.addEventListener('change', saveSettings)
 
     this.input.onLockChange = (locked) => {
-      // Losing the pointer lock mid-game = pause.
-      if (!locked && this.state === STATE.PLAYING) this.pause()
+      // Losing the pointer lock mid-game = pause (desktop only).
+      if (!this.input.isTouch && !locked && this.state === STATE.PLAYING) this.pause()
     }
 
     window.addEventListener('keydown', (e) => {
@@ -208,7 +215,7 @@ export class Game {
     this.state = STATE.PLAYING
     this.hud.hideOverlay()
     this.hud.show()
-    this.input.requestLock()
+    if (!this.input.isTouch) this.input.requestLock()
     this.clock.getDelta() // reset dt
     this._loop()
   }
@@ -238,7 +245,7 @@ export class Game {
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
           this.hud.show()
-          this.input.requestLock()
+          if (!this.input.isTouch) this.input.requestLock()
           this.clock.getDelta()
           this._loop()
         },
@@ -326,7 +333,7 @@ export class Game {
     if (this.state !== STATE.PAUSED) return
     this.state = STATE.PLAYING
     this.hud.hideOverlay()
-    this.input.requestLock()
+    if (!this.input.isTouch) this.input.requestLock()
     this.clock.getDelta()
     this._loop()
   }

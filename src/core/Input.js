@@ -8,6 +8,11 @@ export class Input {
     this._clicked = false  // left-button press edge (for semi-auto)
     this._wheel = 0        // accumulated wheel steps (-1/+1)
 
+    // Touch / mobile: a virtual move stick written by MobileControls, plus a flag
+    // so the game skips pointer-lock on phones.
+    this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window
+    this.touchMove = { x: 0, y: 0 } // x = strafe, y = forward (-1..1)
+
     this._onKeyDown = (e) => {
       this.keys.add(e.code)
       if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault()

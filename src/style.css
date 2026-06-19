@@ -146,6 +146,39 @@ body {
 }
 #ads-vignette.on { opacity: 1; }
 
+/* ---- Mobile touch controls ---- */
+#mobile-controls { display: none; }
+body.touch #mobile-controls { display: block; }
+
+#m-joy {
+  position: fixed; left: 26px; bottom: 26px;
+  width: 130px; height: 130px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08); border: 2px solid rgba(255, 255, 255, 0.2);
+  z-index: 20; touch-action: none;
+}
+#m-knob {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
+  margin: -28px 0 0 -28px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35); border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+#m-buttons {
+  position: fixed; right: 18px; bottom: 18px; z-index: 20;
+  display: grid; grid-template-columns: repeat(3, auto); gap: 10px;
+  justify-items: end; align-items: end; touch-action: none;
+}
+.m-btn {
+  font: inherit; font-weight: 800; color: #fff;
+  background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%; width: 74px; height: 74px;
+  display: flex; align-items: center; justify-content: center;
+  user-select: none; -webkit-user-select: none;
+}
+.m-btn.m-small { width: 52px; height: 52px; font-size: 16px; }
+.m-fire { width: 96px; height: 96px; background: rgba(255, 80, 60, 0.35); border-color: #ff5a4a; }
+.m-jump { background: rgba(61, 169, 252, 0.3); border-color: #3da9fc; }
+.m-btn.on { background: rgba(255, 203, 61, 0.5); border-color: var(--accent); }
+
 /* ---------- Overlay ---------- */
 #overlay {
   position: fixed; inset: 0;

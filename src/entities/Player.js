@@ -187,6 +187,9 @@ export class Player {
       if (this.input.isDown('KeyS')) iz += 1
       if (this.input.isDown('KeyD')) ix += 1
       if (this.input.isDown('KeyA')) ix -= 1
+      // Touch move-stick (analog): forward maps to -iz, right to +ix.
+      const tm = this.input.touchMove
+      if (tm.x || tm.y) { ix += tm.x; iz -= tm.y }
     }
 
     const sprint = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight')
