@@ -28,6 +28,7 @@ export class Game {
     )
 
     this.clock = new THREE.Clock()
+    this._muzzle = new THREE.Vector3() // reused each frame for the tracer origin
     this.input = new Input(canvas)
     this.hud = new HUD()
     this.assets = new AssetLoader()
@@ -159,8 +160,8 @@ export class Game {
 
     // Shooting (hold to fire; Weapons enforces fire rate).
     if (this.input.mouse.down && this.player.alive) {
-      const killed = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies)
-      if (killed) { /* score handled in spawner.onKill */ }
+      const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
+      this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle)
     }
 
     this.player.update(dt)

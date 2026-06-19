@@ -73,31 +73,42 @@ export class Player {
       this.animator.play('Idle', { fade: 0 })
     }
 
-    if (gunScene) this._attachGun(scene, gunScene)
+    // Muzzle point (front-right, gun height) used as the tracer origin so shots
+    // visibly come from the player, not the camera.
+    this.muzzle = new THREE.Object3D()
+    this.muzzle.position.set(0.32, 1.32, 1.0)
+    this.modelPivot.add(this.muzzle)
+
+    if (gunScene) this._attachGun(gunScene)
   }
 
-  // Attach a gun to the right-hand bone if we can find one, else to the body.
-  _attachGun(characterScene, gunScene) {
-    let hand = null
-    characterScene.traverse((o) => {
-      if (hand) return
-      const n = (o.name || '').toLowerCase()
-      if (o.isBone && (n.includes('hand') && (n.includes('r') || n.includes('right')))) hand = o
-    })
-    gunScene.traverse((o) => { if (o.isMesh) o.castShadow = true })
+  // Mount the gun in the player's hands at a sensible, fixed size/orientation
+  // (parented to the model pivot so it always points where the body faces).
+  _attachGun(gunScene) {
+    gunScene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
 
-    if (hand) {
-      // Bone space is scaled by the normalized character; counter-scale the gun.
-      gunScene.scale.setScalar(1)
-      gunScene.position.set(0, 0, 0)
-      hand.add(gunScene)
-    } else {
-      // Fallback: park it at the right hip so the player is visibly armed.
-      gunScene.scale.setScalar(0.5)
-      gunScene.position.set(0.35, 1.1, 0.2)
-      this.modelPivot.add(gunScene)
-    }
+    // Scale the gun to a real-world length (~0.9m) regardless of its native units.
+    const box = new THREE.Box3().setFromObject(gunScene)
+    const size = new THREE.Vector3(); box.getSize(size)
+    const longest = Math.max(size.x, size.y, size.z) || 1
+    gunScene.scale.setScalar(0.9 / longest)
+
+    // Orient the barrel forward (+Z). Kit guns model their length along X.
+    gunScene.rotation.y = -Math.PI / 2
+
+    // Recenter and place in the right hand, chest height, slightly forward.
+    const box2 = new THREE.Box3().setFromObject(gunScene)
+    const center = new THREE.Vector3(); box2.getCenter(center)
+    gunScene.position.set(0.32 - center.x, 1.3 - center.y, 0.45 - center.z)
+
+    this.modelPivot.add(gunScene)
     this.gun = gunScene
+  }
+
+  getMuzzleWorldPosition(out) {
+    return this.muzzle
+      ? this.muzzle.getWorldPosition(out)
+      : out.set(this.position.x, this.position.y + 1.3, this.position.z)
   }
 
   takeDamage(amount) {
