@@ -75,6 +75,13 @@ export class Game {
       })
     })
 
+    // Mode selector buttons (co-op / deathmatch).
+    document.querySelectorAll('.mode-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === btn))
+      })
+    })
+
     this.input.onLockChange = (locked) => {
       // Losing the pointer lock mid-game = pause.
       if (!locked && this.state === STATE.PLAYING) this.pause()
@@ -105,8 +112,11 @@ export class Game {
     this.grenades = []
     this.score = 0
     this._prevHp = this.player.maxHp
+    this._deadHandled = false
+    this._lastAttacker = null
     this.remotePlayers = new Map() // id -> RemotePlayer (multiplayer)
     this.player.onJumpPad = () => this.audio.jumpPad()
+    this.hud.clearKillFeed()
 
     // HUD hooks
     this.weapons.onFire = () => {
@@ -169,6 +179,7 @@ export class Game {
 
   start() {
     this.audio.resume()
+    this.onlineMode = null // solo = co-op waves
     this._disconnect() // solo play: drop any prior connection
     this._resetGameObjects()
     this.state = STATE.PLAYING
@@ -186,6 +197,7 @@ export class Game {
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
     const room = (document.getElementById('mp-room').value || 'lobby').trim()
     const url = (document.getElementById('mp-server').value || 'ws://localhost:8080').trim()
+    this.onlineMode = document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
     status.textContent = 'Connecting…'
 
     this._disconnect()
@@ -196,6 +208,9 @@ export class Game {
       handlers: {
         onWelcome: (id, peers) => {
           status.textContent = ''
+          this.peerNames.set(id, this._selfName)
+          this.kills = 0; this.deaths = 0
+          this.hud.setScore('0/0')
           for (const peer of peers) this._addRemote(peer.id, peer.name, peer.p)
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
@@ -215,18 +230,59 @@ export class Game {
             new THREE.Vector3(from[0], from[1], from[2]),
             new THREE.Vector3(to[0], to[1], to[2]), 0x9ad0ff, 0.06)
         },
-        onHit: (fromId, dmg) => this.player.takeDamage(dmg),
+        onHit: (fromId, dmg) => {
+          if (!this.player.alive) return
+          this._lastAttacker = fromId
+          this.player.takeDamage(dmg)
+        },
+        onKilled: (byId, victimId) => this._onKilled(byId, victimId),
         onError: () => { status.textContent = 'Connection failed. Is the server running?' },
         onClose: () => { if (this.state === STATE.PLAYING) status.textContent = 'Disconnected.' },
       },
     })
+    this.peerNames = new Map([[this.net?.id, name]]) // updated on welcome
+    this._selfName = name
   }
 
   _addRemote(id, name, state) {
     if (this.remotePlayers.has(id)) return
-    const rp = new RemotePlayer({ world: this.world, assets: this.assets, name })
+    const rp = new RemotePlayer({ world: this.world, assets: this.assets, name, id })
     if (state) rp.setState(state)
     this.remotePlayers.set(id, rp)
+    this.peerNames?.set(id, name)
+  }
+
+  _handleMpDeath() {
+    if (this._deadHandled) return
+    this._deadHandled = true
+    this.net.sendKilled(this._lastAttacker ?? null)
+    this.kills = this.kills || 0
+    this.deaths = (this.deaths || 0) + 1
+    this.hud.setScore(`${this.kills}/${this.deaths}`)
+    setTimeout(() => this._respawn(), 1800)
+  }
+
+  _respawn() {
+    const a = Math.random() * Math.PI * 2
+    const r = this.world.arenaRadius - 6
+    this.player.position.set(Math.cos(a) * r, 0, Math.sin(a) * r)
+    this.player.velocity.set(0, 0, 0)
+    this.player.hp = this.player.maxHp
+    this.player.alive = true
+    this._prevHp = this.player.hp
+    this._deadHandled = false
+    this._lastAttacker = null
+  }
+
+  _onKilled(byId, victimId) {
+    const killer = byId != null ? (this.peerNames?.get(byId) || `Player${byId}`) : 'the world'
+    const victim = victimId === this.net?.id ? this._selfName : (this.peerNames?.get(victimId) || `Player${victimId}`)
+    this.hud.addKillFeed(`${killer} ▸ ${victim}`)
+    if (byId === this.net?.id && victimId !== this.net?.id) {
+      this.kills = (this.kills || 0) + 1
+      this.deaths = this.deaths || 0
+      this.hud.setScore(`${this.kills}/${this.deaths}`)
+    }
   }
 
   _disconnect() {
@@ -292,11 +348,16 @@ export class Game {
     const wantFire = this.weapons.auto ? this.input.mouse.down : click
     if (wantFire && this.player.alive) {
       const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
-      const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle, ads)
+      const remotes = this.net ? [...this.remotePlayers.values()] : []
+      const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle, ads, remotes)
       if (res.fired) {
         firedThisFrame = true
         if (res.killed) { this.hud.hitMarker(true); this.audio.kill() }
         else if (res.hit) { this.hud.hitMarker(false); this.audio.hit() }
+        if (res.playerHit != null && this.net) {
+          this.net.sendHit(res.playerHit, this.weapons.def.damage)
+          this.hud.hitMarker(false); this.audio.hit()
+        }
         if (res.barrel) this.explode(res.barrel)
         // Broadcast the shot so other players see a tracer.
         if (this.net) {
@@ -337,13 +398,14 @@ export class Game {
     if (firedThisFrame || this.weapons.reloading) spread += 12
     this.hud.setCrosshairSpread(spread)
     this.weapons.update(dt)
-    this.spawner.update(dt, this.player, this.camera)
+    if (this.onlineMode !== 'dm') this.spawner.update(dt, this.player, this.camera)
 
     this.hud.setHp(this.player.hp, this.player.maxHp)
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
 
     if (!this.player.alive && this.state === STATE.PLAYING) {
-      this.gameOver()
+      if (this.net) this._handleMpDeath()
+      else this.gameOver()
     }
 
     this.renderer.render(this.world.scene, this.camera)

@@ -60,8 +60,8 @@ export class Weapons {
 
   // Attempt to fire. aim={origin,dir}; muzzlePos = tracer origin; targets=enemies;
   // ads=true tightens spread. Returns {fired,hit,killed,barrel}.
-  tryFire(aim, targets, muzzlePos, ads = false) {
-    const NONE = { fired: false, hit: false, killed: false, barrel: null }
+  tryFire(aim, targets, muzzlePos, ads = false, players = []) {
+    const NONE = { fired: false, hit: false, killed: false, barrel: null, playerHit: null }
     if (this._cooldown > 0 || this._reloading > 0) return NONE
     if (this.ammo <= 0) { this.startReload(); return NONE }
 
@@ -72,11 +72,12 @@ export class Weapons {
 
     const meshes = []
     for (const t of targets) if (t.alive && t.hitMesh) meshes.push(t.hitMesh)
+    for (const pl of players) if (pl.hitMesh) meshes.push(pl.hitMesh)
     for (const o of this.world.obstacles) meshes.push(o.mesh)
 
     const start = muzzlePos ? muzzlePos.clone() : aim.origin.clone().addScaledVector(aim.dir, 1.2)
     const spread = def.spread * (ads ? 0.3 : 1)
-    let hitEnemy = false, killed = false, barrel = null
+    let hitEnemy = false, killed = false, barrel = null, playerHit = null
 
     for (let p = 0; p < def.pellets; p++) {
       const dir = aim.dir.clone()
@@ -94,11 +95,16 @@ export class Weapons {
         const hit = hits[0]
         endPoint = hit.point.clone()
         const enemy = targets.find((t) => t.hitMesh === hit.object)
+        const remote = hit.object.userData?.remote
         if (enemy) {
           if (enemy.takeHit(def.damage)) killed = true
           hitEnemy = true
           this.impact(hit.point, 0xff5555)
           this.particles?.emit(hit.point, 6, { color: [1, 0.25, 0.2], speed: 5, size: 0.55, life: 0.32 })
+        } else if (remote) {
+          playerHit = remote.id
+          this.impact(hit.point, 0xff5555)
+          this.particles?.emit(hit.point, 6, { color: [1, 0.3, 0.3], speed: 5, size: 0.55, life: 0.32 })
         } else {
           const b = findBarrel(hit.object)
           if (b) barrel = b
@@ -113,7 +119,7 @@ export class Weapons {
 
     this.flash(start, 0xffd24a)
     if (this.ammo <= 0) this.startReload()
-    return { fired: true, hit: hitEnemy, killed, barrel }
+    return { fired: true, hit: hitEnemy, killed, barrel, playerHit }
   }
 
   // ---- Public combat FX (player weapon + enemies) ------------------------

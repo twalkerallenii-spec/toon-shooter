@@ -42,6 +42,7 @@ export class Net {
       case 'state': this.handlers.onState?.(msg.id, msg.p); break
       case 'shoot': this.handlers.onShoot?.(msg.id, msg.from, msg.to); break
       case 'hit': this.handlers.onHit?.(msg.from, msg.dmg); break
+      case 'killed': this.handlers.onKilled?.(msg.by, msg.victim); break
     }
   }
 
@@ -59,6 +60,10 @@ export class Net {
 
   sendHit(targetId, dmg) {
     if (this.connected) this._send({ t: 'hit', target: targetId, dmg })
+  }
+
+  sendKilled(byId) {
+    if (this.connected) this._send({ t: 'killed', by: byId })
   }
 
   close() {

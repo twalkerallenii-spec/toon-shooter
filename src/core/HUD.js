@@ -12,6 +12,7 @@ export class HUD {
       reloadHint: document.getElementById('reload-hint'),
       weaponName: document.getElementById('weapon-name'),
       weaponList: document.getElementById('weapon-list'),
+      killfeed: document.getElementById('killfeed'),
       adsVignette: document.getElementById('ads-vignette'),
       overlay: document.getElementById('overlay'),
       overlayMsg: document.getElementById('overlay-msg'),
@@ -58,6 +59,18 @@ export class HUD {
   setAds(on) {
     this.el.adsVignette.classList.toggle('on', on)
   }
+
+  // Add a kill-feed line; auto-expires after a few seconds.
+  addKillFeed(text) {
+    const el = document.createElement('div')
+    el.className = 'kf'
+    el.textContent = text
+    this.el.killfeed.appendChild(el)
+    setTimeout(() => el.remove(), 4500)
+    while (this.el.killfeed.childElementCount > 5) this.el.killfeed.firstChild.remove()
+  }
+
+  clearKillFeed() { this.el.killfeed.innerHTML = '' }
 
   // Dynamic reticle bloom: 0 = tight, larger = wider gap. Smoothed toward target.
   setCrosshairSpread(extra) {

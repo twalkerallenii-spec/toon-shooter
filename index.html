@@ -36,6 +36,7 @@
         <div id="reload-hint" class="hidden">RELOADING…</div>
       </div>
       <div id="weapon-list"></div>
+      <div id="killfeed"></div>
       <div id="ads-vignette"></div>
     </div>
 
@@ -61,6 +62,10 @@
             <input id="mp-room" placeholder="Room" value="lobby" maxlength="24" />
           </div>
           <input id="mp-server" placeholder="ws://localhost:8080" />
+          <div class="mode-options">
+            <button class="mode-btn active" data-mode="coop">Co-op</button>
+            <button class="mode-btn" data-mode="dm">Deathmatch</button>
+          </div>
           <button id="online-btn">PLAY ONLINE</button>
           <div id="mp-status"></div>
         </div>

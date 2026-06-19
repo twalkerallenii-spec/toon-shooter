@@ -115,6 +115,29 @@ body {
 }
 #weapon-list .wpn.active b { color: var(--accent); }
 
+/* Mode selector (co-op / deathmatch) */
+.mode-options { display: flex; gap: 8px; }
+.mode-btn {
+  flex: 1; font: inherit; font-size: 13px; font-weight: 700;
+  color: rgba(255, 255, 255, 0.7); cursor: pointer;
+  padding: 8px; border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.mode-btn.active { color: #1a1300; background: #3da9fc; border-color: #3da9fc; }
+
+/* Kill feed (top-left, below HP) */
+#killfeed {
+  position: absolute; top: 64px; left: 22px;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 14px; font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+#killfeed .kf {
+  background: rgba(0, 0, 0, 0.35); padding: 3px 8px; border-radius: 6px;
+  animation: kfIn 0.2s ease;
+}
+@keyframes kfIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; } }
+
 /* ADS vignette (subtle scope darkening at screen edges) */
 #ads-vignette {
   position: absolute; inset: 0; pointer-events: none; opacity: 0;

@@ -4,9 +4,10 @@ import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 // A networked other-player avatar: the animated soldier model with a name tag and
 // HP bar, smoothly interpolated toward the latest networked state.
 export class RemotePlayer {
-  constructor({ world, assets, name }) {
+  constructor({ world, assets, name, id }) {
     this.world = world
     this.name = name
+    this.id = id
     this.group = new THREE.Group()
     this.targetHeight = 1.8
 
@@ -14,6 +15,14 @@ export class RemotePlayer {
     this.targetYaw = 0
     this.moving = false
     this.hp = 100
+
+    // Invisible capsule used for PvP bullet raycasts.
+    this.hitMesh = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.5, 1.0, 4, 8),
+      new THREE.MeshBasicMaterial({ visible: false })
+    )
+    this.hitMesh.position.y = 1.0
+    this.hitMesh.userData.remote = this
 
     this.nameTag = makeNameTag(name)
     this.nameTag.position.set(0, 2.6, 0)
@@ -26,6 +35,7 @@ export class RemotePlayer {
 
     this.modelPivot = new THREE.Group()
     this.group.add(this.modelPivot)
+    this.group.add(this.hitMesh)
     world.scene.add(this.group)
 
     assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {

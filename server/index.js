@@ -82,6 +82,10 @@ wss.on('connection', (ws) => {
           if (peer.ws.id === msg.target) send(peer.ws, { t: 'hit', from: ws.id, dmg: msg.dmg })
         }
         break
+      case 'killed':
+        // Victim reports who killed them; tell the whole room (kill feed + score).
+        broadcast(room, { t: 'killed', by: msg.by, victim: ws.id })
+        break
     }
   })
 
