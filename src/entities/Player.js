@@ -63,7 +63,7 @@ export class Player {
 
     this.flashTimer = 0
     this.muzzleFlash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.13, 8, 8),
+      new THREE.SphereGeometry(0.05, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })
     )
     this.muzzleFlash.renderOrder = 30
@@ -160,7 +160,7 @@ export class Player {
     if (this.flashTimer > 0) {
       this.flashTimer -= dt
       this.muzzleFlash.visible = true
-      this.muzzleFlash.scale.setScalar(0.7 + Math.random() * 0.9)
+      this.muzzleFlash.scale.setScalar(0.6 + Math.random() * 0.5)
       this.muzzleFlash.rotation.z = Math.random() * Math.PI
     } else if (this.muzzleFlash) {
       this.muzzleFlash.visible = false
@@ -182,8 +182,8 @@ export class Player {
 
     let ix = 0, iz = 0
     if (this.alive) {
-      if (this.input.isDown('KeyW')) iz += 1
-      if (this.input.isDown('KeyS')) iz -= 1
+      if (this.input.isDown('KeyW')) iz -= 1 // forward (basis points behind, so negate)
+      if (this.input.isDown('KeyS')) iz += 1
       if (this.input.isDown('KeyD')) ix += 1
       if (this.input.isDown('KeyA')) ix -= 1
     }
