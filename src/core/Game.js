@@ -99,23 +99,16 @@ export class Game {
   }
 
   async _loadOptionalModels() {
-    // Toon Shooter Game Kit assets (glTF with embedded buffers).
-    const [soldier, gun, ...props] = await Promise.all([
-      this.assets.loadModel('models/characters/Character_Soldier.gltf'),
-      this.assets.loadModel('models/guns/AK.gltf'),
-      this.assets.loadModel('models/env/Crate.gltf'),
-      this.assets.loadModel('models/env/Barrier_Large.gltf'),
-      this.assets.loadModel('models/env/CardboardBoxes_1.gltf'),
-      this.assets.loadModel('models/env/Container_Small.gltf'),
-      this.assets.loadModel('models/env/ExplodingBarrel.gltf'),
-      this.assets.loadModel('models/env/SackTrench.gltf'),
-    ])
-
-    if (soldier) this.player.setModel(soldier.scene, soldier.animations, gun ? gun.scene : null)
-    this.world.addPropModels(props.filter(Boolean))
+    // Player character (no gun mounted — held weapon removed per design).
+    const soldier = await this.assets.loadModel('models/characters/Character_Soldier.gltf')
+    if (soldier) this.player.setModel(soldier.scene, soldier.animations, null)
 
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
+
+    // Build the designed arena from kit environment props.
+    const { LevelBuilder } = await import('../systems/LevelBuilder.js')
+    await new LevelBuilder({ world: this.world, assets: this.assets }).build()
   }
 
   start() {
