@@ -84,8 +84,9 @@ export class Vehicle {
     this.forward(TMP)
     this.position.addScaledVector(TMP, this.speed * dt)
 
-    // Obstacle push-out (circle vs circle).
+    // Obstacle push-out (circle vs circle); skip non-colliders (radius 0).
     for (const o of this.world.obstacles) {
+      if (o.radius <= 0) continue
       const dx = this.position.x - o.mesh.position.x
       const dz = this.position.z - o.mesh.position.z
       const d = Math.hypot(dx, dz)
@@ -97,6 +98,14 @@ export class Vehicle {
         this.speed *= 0.6 // lose momentum on impact
       }
     }
+
+    // Solid city: push out of walls + follow the street height.
+    if (this.world.cityCollider) {
+      if (this.world.cityCollider.pushOut(this.position, this.radius, 0.8)) this.speed *= 0.5
+      const gy = this.world.cityCollider.groundY(this.position.x, this.position.z)
+      this.position.y = gy != null ? gy : 0
+    }
+
     this.world.clampToArena(this.position)
 
     this.group.position.copy(this.position)

@@ -226,7 +226,8 @@ export class Player {
     this.position.y += this.velocity.y * dt
     this.position.z += this.velocity.z * dt
 
-    this._resolvePlatforms()
+    if (this.world.cityCollider) this._resolveCity()
+    else this._resolvePlatforms()
     this.world.clampToArena(this.position)
 
     // Jump pads launch you when standing on one.
@@ -239,6 +240,25 @@ export class Player {
           break
         }
       }
+    }
+  }
+
+  // Movement collision against a solid city mesh: push out of walls, stand on
+  // streets/rooftops via a downward ray.
+  _resolveCity() {
+    const c = this.world.cityCollider
+    const p = this.position
+    // Walls at two body heights so curbs and tall walls both block.
+    c.pushOut(p, 0.6, 1.2)
+    c.pushOut(p, 0.6, 0.4)
+    // Ground / step-up.
+    const gy = c.groundY(p.x, p.z)
+    const support = gy != null ? gy : this.world.groundY
+    if (support <= p.y + 0.6) { // small step-ups snap; big drops let you fall
+      if (p.y <= support) { p.y = support; if (this.velocity.y < 0) this.velocity.y = 0; this.onGround = true }
+      else this.onGround = false
+    } else {
+      this.onGround = false
     }
   }
 

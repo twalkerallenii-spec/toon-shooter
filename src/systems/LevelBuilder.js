@@ -37,15 +37,39 @@ export class LevelBuilder {
     return this.world.placeModel(m.scene, opts)
   }
 
-  // ROYALE: clean slate for now — a big open field with the backdrop + storm and
-  // a few car spawns. (City/road/building generation removed pending a redesign.)
+  // ROYALE: load the single Fortnite city GLB as the whole map, scaled to fill
+  // the arena, fully solid via mesh collision (CityCollider). Storm shrinks to
+  // center to force players together.
   async buildRoyale() {
     const HALF = this.world.arenaRadius
-    // Scatter a handful of car spawns so traversal still works while we redesign.
+    const m = await this.assets.loadModel('models/fortnite-city.glb')
+    if (!m) return
+    const city = m.scene
+
+    // Scale to fill the play area, drop to the ground, center on origin.
+    let box = new THREE.Box3().setFromObject(city)
+    const size = new THREE.Vector3(); box.getSize(size)
+    const horiz = Math.max(size.x, size.z) || 1
+    city.scale.setScalar((HALF * 2 * 0.92) / horiz)
+    box = new THREE.Box3().setFromObject(city)
+    const center = new THREE.Vector3(); box.getCenter(center)
+    city.position.x -= center.x
+    city.position.z -= center.z
+    city.position.y -= box.min.y
+    city.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = true } })
+    this.world.scene.add(city)
+    this.world.scene.updateMatrixWorld(true)
+
+    // Everything solid: mesh collider for player/cars + the city as a bullet
+    // raycast target (radius 0 so the circle push-out skips it).
+    const { CityCollider } = await import('./CityCollider.js')
+    this.world.cityCollider = new CityCollider(city)
+    this.world.obstacles.push({ mesh: city, radius: 0, x: 0, z: 0 })
+
+    // A few car spawns near the center (ground height is resolved at runtime).
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2
-      const r = HALF * 0.4
-      this.world.carSpawns.push({ x: Math.cos(a) * r, z: Math.sin(a) * r })
+      this.world.carSpawns.push({ x: Math.cos(a) * HALF * 0.35, z: Math.sin(a) * HALF * 0.35 })
     }
   }
 

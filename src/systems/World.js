@@ -18,6 +18,7 @@ export class World {
     this.barrels = []     // explodable barrels: { group, obstacle, x, z, radius, alive }
     this.bases = []       // team base markers: { team, x, z } — used by CTF/objective modes
     this.carSpawns = []   // { x, z } open spots where the level wants cars placed
+    this.cityCollider = null // mesh collider for a big city model (BR)
 
     this._buildLights()
     this._buildGround()
