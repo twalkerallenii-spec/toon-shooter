@@ -7,14 +7,15 @@ export class World {
   constructor() {
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x9fd3ff)
-    this.scene.fog = new THREE.Fog(0x9fd3ff, 55, 140)
+    this.scene.fog = new THREE.Fog(0x9fd3ff, 90, 260)
 
-    this.arenaRadius = 42 // half-extent of the square arena (kept name for callers)
+    this.arenaRadius = 75 // half-extent of the square arena (kept name for callers)
     this.groundY = 0
     this.obstacles = []   // { mesh, radius, x, z } — used for bullet raycasts
     this.platforms = []   // AABB colliders { minX, maxX, minZ, maxZ, top, bottom } — movement
     this.jumpPads = []    // { x, z, radius, power, mesh }
     this.barrels = []     // explodable barrels: { group, obstacle, x, z, radius, alive }
+    this.bases = []       // team base markers: { team, x, z } — used by CTF/objective modes
 
     this._buildLights()
     this._buildGround()
@@ -33,6 +34,19 @@ export class World {
     this.jumpPads.push({ x, z, radius: 1.8, power, mesh: pad })
   }
 
+  // A team base pad (capture point / flag stand for objective modes).
+  addBase(team, x, z) {
+    const col = team === 'red' ? 0xff4444 : 0x4488ff
+    const pad = new THREE.Mesh(
+      new THREE.CylinderGeometry(4, 4.4, 0.3, 32),
+      new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.45, roughness: 0.7 })
+    )
+    pad.position.set(x, 0.16, z)
+    pad.receiveShadow = true
+    this.scene.add(pad)
+    this.bases.push({ team, x, z, pad })
+  }
+
   _buildLights() {
     const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x55613f, 0.85)
     this.scene.add(hemi)
@@ -40,14 +54,15 @@ export class World {
     const sun = new THREE.DirectionalLight(0xfff1d0, 1.7)
     sun.position.set(50, 70, 30)
     sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
-    const s = this.arenaRadius + 15
+    sun.shadow.mapSize.set(4096, 4096) // larger arena -> bigger shadow map
+    sun.position.set(70, 100, 45)
+    const s = this.arenaRadius + 20
     sun.shadow.camera.left = -s
     sun.shadow.camera.right = s
     sun.shadow.camera.top = s
     sun.shadow.camera.bottom = -s
     sun.shadow.camera.near = 1
-    sun.shadow.camera.far = 250
+    sun.shadow.camera.far = 400
     sun.shadow.bias = -0.0004
     this.scene.add(sun)
     this.sun = sun
