@@ -29,6 +29,7 @@ export class Player {
     this.maxHp = 100
     this.hp = this.maxHp
     this.alive = true
+    this.team = null // set by Game in team modes; used by bot targeting
 
     // Movement tuning
     this.walkSpeed = 7
@@ -135,6 +136,12 @@ export class Player {
     if (!this.alive) return
     this.hp = Math.max(0, this.hp - amount)
     if (this.hp <= 0) this.alive = false
+  }
+
+  // Combatant interface (so bots can damage + attribute kills to the player).
+  applyDamage(amount, attacker) {
+    this._lastAttacker = attacker || this._lastAttacker
+    this.takeDamage(amount)
   }
 
   notifyFired() {
@@ -251,12 +258,16 @@ export class Player {
     // Walls at two body heights so curbs and tall walls both block.
     c.pushOut(p, 0.6, 1.2)
     c.pushOut(p, 0.6, 0.4)
-    // Ground / step-up.
-    const gy = c.groundY(p.x, p.z)
-    const support = gy != null ? gy : this.world.groundY
-    if (support <= p.y + 0.6) { // small step-ups snap; big drops let you fall
-      if (p.y <= support) { p.y = support; if (this.velocity.y < 0) this.velocity.y = 0; this.onGround = true }
-      else this.onGround = false
+    // Ground: the flat plane (world.groundY) is always a hard floor so you can
+    // never fall through the world. City surfaces above it are used only when
+    // they're within step range (stairs/curbs/rooftops you're actually on).
+    const gy = c.groundY(p.x, p.z, p.y + 3)
+    let support = this.world.groundY
+    if (gy != null && gy > support && gy <= p.y + 0.6) support = gy
+    if (p.y <= support) {
+      p.y = support
+      if (this.velocity.y < 0) this.velocity.y = 0
+      this.onGround = true
     } else {
       this.onGround = false
     }

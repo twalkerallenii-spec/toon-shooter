@@ -1,4 +1,5 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js'
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 
@@ -11,6 +12,10 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 export class AssetLoader {
   constructor() {
     this.loader = new GLTFLoader()
+    // Draco decoder (for the compressed city GLB). Decoder wasm from Google CDN.
+    const draco = new DRACOLoader()
+    draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/')
+    this.loader.setDRACOLoader(draco)
     this.collada = new ColladaLoader()
     this.cache = new Map() // path -> gltf
     this.daeCache = new Map() // path -> collada result

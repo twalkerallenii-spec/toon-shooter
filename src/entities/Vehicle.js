@@ -102,8 +102,10 @@ export class Vehicle {
     // Solid city: push out of walls + follow the street height.
     if (this.world.cityCollider) {
       if (this.world.cityCollider.pushOut(this.position, this.radius, 0.8)) this.speed *= 0.5
-      const gy = this.world.cityCollider.groundY(this.position.x, this.position.z)
-      this.position.y = gy != null ? gy : 0
+      const gy = this.world.cityCollider.groundY(this.position.x, this.position.z, this.position.y + 4)
+      this.position.y = gy != null && gy >= 0 ? gy : 0
+    } else {
+      this.position.y = 0
     }
 
     this.world.clampToArena(this.position)

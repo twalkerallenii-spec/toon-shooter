@@ -42,7 +42,7 @@ export class LevelBuilder {
   // center to force players together.
   async buildRoyale() {
     const HALF = this.world.arenaRadius
-    const m = await this.assets.loadModel('models/fortnite-city.glb')
+    const m = await this.assets.loadModel('models/fortnite-city-opt.glb')
     if (!m) return
     const city = m.scene
 

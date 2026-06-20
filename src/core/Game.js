@@ -13,6 +13,7 @@ import { Zone } from '../systems/Zone.js'
 import { Flags } from '../systems/Flags.js'
 import { Player } from '../entities/Player.js'
 import { Vehicle } from '../entities/Vehicle.js'
+import { Bot } from '../entities/Bot.js'
 import { Grenade } from '../entities/Grenade.js'
 import { Net } from '../net/Net.js'
 import { RemotePlayer } from '../entities/RemotePlayer.js'
@@ -183,6 +184,8 @@ export class Game {
     this.grenades = []
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
     this.cars = []
+    this.bots = []
+    this.kills = 0
     this.driving = null
     this._ePrev = false
     this.ctfMode = this.onlineMode === 'ctf'
@@ -261,6 +264,30 @@ export class Game {
 
     // Spawn drivable cars at the level's open car-spawn points.
     await this._spawnCars()
+
+    // Fill solo Battle Royale with CPU players (free-for-all: they fight each
+    // other and you).
+    if (this.brMode && !this.net) this._spawnBots(12)
+  }
+
+  _spawnBots(count) {
+    const NAMES = ['Ace', 'Blaze', 'Cyborg', 'Drift', 'Echo', 'Fang', 'Ghost', 'Havoc', 'Iris', 'Jolt', 'Kilo', 'Lynx', 'Nova', 'Onyx', 'Pyro', 'Rook']
+    const HALF = this.world.arenaRadius
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + 0.3
+      const r = HALF * (0.35 + Math.random() * 0.5)
+      const pos = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)
+      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos })
+      bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
+      this.bots.push(bot)
+    }
+  }
+
+  _onBotDeath(bot, attacker) {
+    const killer = attacker ? attacker.name : (this._selfName || 'You')
+    this.hud.addKillFeed(`${killer} ▸ ${bot.name}`)
+    if (attacker && attacker.kills != null) attacker.kills++
+    if (!attacker) this.kills = (this.kills || 0) + 1 // player kill (no bot attacker)
   }
 
   async _spawnCars() {
@@ -361,10 +388,12 @@ export class Game {
     this.audio.resume()
     const status = document.getElementById('mp-status')
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
-    const room = (document.getElementById('mp-room').value || 'lobby').trim()
+    const roomName = (document.getElementById('mp-room').value || 'lobby').trim()
     const url = (document.getElementById('mp-server').value || 'wss://toon-shooter-server.onrender.com').trim()
     this.onlineMode = document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
     this.brMode = this.onlineMode === 'br'
+    // Separate room per event so modes never mix (CTF players only meet CTF, etc.).
+    const room = `${this.onlineMode}:${roomName}`
     status.textContent = 'Connecting…'
 
     this._disconnect()
@@ -585,7 +614,10 @@ export class Game {
         .map(([id, r]) => ({ ...r, you: id === this.net.id }))
         .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)
     }
-    return [{ name: this._selfName || 'You', kills: this.enemyKills || 0, deaths: this.player?.alive ? 0 : 1, you: true }]
+    // Solo: you + any CPU bots, ranked by kills.
+    const rows = [{ name: this._selfName || 'You', kills: this.kills || this.enemyKills || 0, deaths: this.player?.alive ? 0 : 1, you: true }]
+    for (const b of this.bots) rows.push({ name: b.name, kills: b.kills || 0, deaths: b.alive ? 0 : 1 })
+    return rows.sort((a, b) => b.kills - a.kills)
   }
 
   _disconnect() {
@@ -657,7 +689,9 @@ export class Game {
     if (wantFire && this.player.alive) {
       const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
       const remotes = this.net ? [...this.remotePlayers.values()] : []
-      const res = this.weapons.tryFire(this.player.getAimRay(), this.spawner.enemies, muzzle, ads, remotes)
+      // Bots are shootable too (Enemy-like hitMesh/takeHit).
+      const targets = this.bots.length ? [...this.spawner.enemies, ...this.bots] : this.spawner.enemies
+      const res = this.weapons.tryFire(this.player.getAimRay(), targets, muzzle, ads, remotes)
       if (res.fired) {
         firedThisFrame = true
         if (res.killed) { this.hud.hitMarker(true); this.audio.kill() }
@@ -693,6 +727,20 @@ export class Game {
     else this.player.update(dt)
     // Idle cars still settle (friction); the driven one is updated in _driveUpdate.
     for (const car of this.cars) if (car !== this.driving) car.update(dt)
+
+    // CPU bots (free-for-all): fight each other and the player.
+    if (this.bots.length) {
+      const live = this.bots.filter((b) => b.alive)
+      const combatants = [this.player, ...live]
+      for (let i = this.bots.length - 1; i >= 0; i--) {
+        if (this.bots[i].update(dt, { combatants, camera: this.camera })) this.bots.splice(i, 1)
+      }
+      // Solo BR: when every bot is eliminated and you're alive, you win.
+      if (this.brMode && !this.net && !this._wonBR && this.player.alive && live.length === 0 && this.bots.length === 0) {
+        this._wonBR = true
+        this._winMatch('#1 VICTORY ROYALE', `Last one standing. Eliminations: ${this.kills || 0}.`)
+      }
+    }
 
     // Car prompt.
     if (this.cars.length) {
