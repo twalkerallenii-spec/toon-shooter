@@ -30,81 +30,22 @@ export class LevelBuilder {
     return this.buildArena()
   }
 
-  // Place a city-pack GLB (models/city/<name>.glb).
+  // Place a city-pack GLB (models/city/<name>.glb). Kept for future use.
   async placeCity(name, opts) {
     const m = await this.assets.loadModel(`models/city/${name}.glb`)
     if (!m) return null
     return this.world.placeModel(m.scene, opts)
   }
 
-  // ROYALE: a big CHUNKED city grid (free city pack + road pack). Manhattan
-  // layout — roads on a lattice, tall buildings filling the blocks — generated
-  // per cell so it is infinite-ready. The storm shrinks toward center to force
-  // players together.
+  // ROYALE: clean slate for now — a big open field with the backdrop + storm and
+  // a few car spawns. (City/road/building generation removed pending a redesign.)
   async buildRoyale() {
     const HALF = this.world.arenaRadius
-
-    // Measure the road tile to size the grid cell.
-    const inter = await this.assets.loadModel('models/city/intersectionRoad.glb')
-    let CELL = 28
-    if (inter) { const b = new THREE.Box3().setFromObject(inter.scene); const s = new THREE.Vector3(); b.getSize(s); CELL = Math.max(s.x, s.z) }
-    this._cell = CELL
-
-    const reach = Math.ceil(HALF / CELL) + 1
-    const jobs = []
-    const TAU = Math.PI * 2
-    const mod3 = (n) => ((n % 3) + 3) % 3
-
-    for (let gx = -reach; gx <= reach; gx++) {
-      for (let gz = -reach; gz <= reach; gz++) {
-        const x = gx * CELL, z = gz * CELL
-        if (Math.hypot(x, z) > HALF + CELL) continue
-        const rng = cellRng(gx, gz)
-        const roadCol = mod3(gx) === 0
-        const roadRow = mod3(gz) === 0
-
-        if (roadCol && roadRow) {
-          jobs.push(this.placeCity('intersectionRoad', { x, z, baseY: -0.55, solid: false }))
-          // street furniture on intersection corners
-          if (rng() < 0.5) jobs.push(this.placeCity('trafficLight', { x: x + CELL * 0.32, z: z + CELL * 0.32, rotY: rng() * TAU }))
-          this.world.carSpawns.push({ x, z })
-        } else if (roadRow) {
-          jobs.push(this.placeCity('straightRoad', { x, z, rotY: Math.PI / 2, baseY: -0.55, solid: false }))
-          if (rng() < 0.25) this.world.carSpawns.push({ x, z })
-        } else if (roadCol) {
-          jobs.push(this.placeCity('straightRoad', { x, z, rotY: 0, baseY: -0.55, solid: false }))
-          if (rng() < 0.25) this.world.carSpawns.push({ x, z })
-        } else {
-          // Building block: keep the very center clear as the spawn plaza.
-          if (Math.hypot(x, z) < CELL * 0.9) continue
-          this._cityBlock(x, z, CELL, rng, jobs)
-        }
-      }
-    }
-
-    await Promise.all(jobs)
-  }
-
-  // Fill one block cell with tall buildings + a little greenery/props.
-  _cityBlock(cx, cz, CELL, rng, jobs) {
-    const TAU = Math.PI * 2
-    const off = CELL * 0.24
-    const corners = [[-off, -off], [off, -off], [-off, off], [off, off]]
-    for (const [ox, oz] of corners) {
-      if (rng() < 0.22) { // a few gaps -> alleys/yards to move through
-        if (rng() < 0.5) jobs.push(this.placeCity(rng() < 0.5 ? 'tree6' : 'tree2', { x: cx + ox, z: cz + oz, rotY: rng() * TAU, scale: 1 + rng(), solid: true, radiusMul: 0.4 }))
-        continue
-      }
-      const scale = 0.9 + rng() * 1.6 // buildings ~14m..40m tall (>> player)
-      jobs.push(this.placeCity('building3', {
-        x: cx + ox, z: cz + oz, rotY: Math.floor(rng() * 4) * (Math.PI / 2),
-        scale, solid: true, radiusMul: 0.62, climbable: false,
-      }))
-    }
-    // Occasional roadside prop.
-    if (rng() < 0.5) {
-      const props = ['streetLight', 'stopSign', 'fireHydrant', 'garbageBin', 'trafficCone', 'bench2']
-      jobs.push(this.placeCity(props[Math.floor(rng() * props.length)], { x: cx + (rng() - 0.5) * CELL * 0.6, z: cz + (rng() - 0.5) * CELL * 0.6, rotY: rng() * TAU }))
+    // Scatter a handful of car spawns so traversal still works while we redesign.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const r = HALF * 0.4
+      this.world.carSpawns.push({ x: Math.cos(a) * r, z: Math.sin(a) * r })
     }
   }
 
