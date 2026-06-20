@@ -70,6 +70,14 @@ export class Zone {
     return outside
   }
 
+  // Short HUD status: countdown to the next shrink, or current phase.
+  statusText() {
+    if (this.targetR <= this.minR && !this.shrinking) return '🌀 Final ring'
+    if (this.shrinking) return '🌀 Storm closing…'
+    const s = Math.max(0, Math.ceil(this.phaseTimer))
+    return `⏱ Storm shrinks in 0:${String(s).padStart(2, '0')}`
+  }
+
   dispose() {
     this.world.scene.remove(this.mesh)
     this.mesh.geometry.dispose(); this.mesh.material.dispose()

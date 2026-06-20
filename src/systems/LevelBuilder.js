@@ -24,9 +24,70 @@ export class LevelBuilder {
 
   // Dispatch to a specific map layout.
   async build(mapKey = 'arena') {
+    if (mapKey === 'royale') return this.buildRoyale()
     if (mapKey === 'outpost') return this.buildOutpost()
     if (mapKey === 'rooftops') return this.buildRooftops()
     return this.buildArena()
+  }
+
+  // ROYALE: a big, open Battle Royale island. Sparse clustered cover with wide
+  // open lanes so cars can roam; landmark ruins, trees, barrels, and car spawns.
+  async buildRoyale() {
+    const HALF = this.world.arenaRadius
+    const rng = mulberry32(56789)
+    const TAU = Math.PI * 2
+    const jobs = []
+
+    // A handful of landmark building clusters (POIs), spaced far apart.
+    const pois = [
+      { x: -HALF * 0.5, z: -HALF * 0.5 }, { x: HALF * 0.55, z: -HALF * 0.45 },
+      { x: -HALF * 0.55, z: HALF * 0.5 }, { x: HALF * 0.5, z: HALF * 0.55 },
+      { x: 0, z: -HALF * 0.6 }, { x: 0, z: HALF * 0.6 }, { x: -HALF * 0.62, z: 0 }, { x: HALF * 0.62, z: 0 },
+    ]
+    const bld = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
+    const cover = ['Container_Long', 'Container_Small', 'SackTrench', 'Crate', 'Barrier_Large', 'TrashContainer', 'CardboardBoxes_1']
+    pois.forEach((p, i) => {
+      jobs.push(this.place(bld[i % 4], { x: p.x, z: p.z, rotY: rng() * TAU, solid: true, radiusMul: 0.7 }))
+      const n = 4 + Math.floor(rng() * 4)
+      for (let k = 0; k < n; k++) {
+        const a = rng() * TAU, r = 5 + rng() * 9
+        jobs.push(this.place(cover[Math.floor(rng() * cover.length)], {
+          x: p.x + Math.cos(a) * r, z: p.z + Math.sin(a) * r, rotY: rng() * TAU, solid: true,
+        }))
+      }
+      // Climbable crate stack at each POI.
+      jobs.push(this.place('Crate', { x: p.x + 3, z: p.z + 3, solid: true }))
+      jobs.push(this.place('Crate', { x: p.x + 3, z: p.z + 3, baseY: 2.0, solid: true }))
+      // Car spawn near each POI (kept in the open).
+      this.world.carSpawns.push({ x: p.x + (rng() - 0.5) * 16, z: p.z + (rng() - 0.5) * 16 })
+    })
+
+    // A couple of central car spawns + jump pads.
+    this.world.carSpawns.push({ x: 12, z: 0 }, { x: -12, z: 8 })
+    this.world.addJumpPad(20, 20, 16)
+    this.world.addJumpPad(-20, -20, 16)
+
+    // Light tree scatter (kept sparse so driving stays open).
+    const trees = ['Tree_1', 'Tree_2', 'Tree_3', 'Tree_4']
+    for (let i = 0; i < 40; i++) {
+      const a = rng() * TAU, r = HALF * (0.2 + rng() * 0.75)
+      jobs.push(this.place(trees[i % 4], { x: Math.cos(a) * r, z: Math.sin(a) * r, rotY: rng() * TAU, solid: true, radiusMul: 0.3 }))
+    }
+
+    // Glowing exploding barrels scattered.
+    for (let i = 0; i < 16; i++) {
+      let x = (rng() - 0.5) * HALF * 1.7, z = (rng() - 0.5) * HALF * 1.7
+      const d = Math.hypot(x, z); if (d < 12) { x = x / d * 12; z = z / d * 12 }
+      jobs.push(this.place(rng() < 0.5 ? 'ExplodingBarrel' : 'ExplodingBarrel_Spilled', { x, z, solid: true, radiusMul: 0.9, barrel: true }))
+    }
+
+    // Sparse decoration.
+    const deco = ['Debris_Tires', 'Debris_Pile', 'Sign', 'StreetLight', 'Pipes', 'WoodPlanks', 'Debris_BrokenCar']
+    for (let i = 0; i < 40; i++) {
+      jobs.push(this.place(deco[i % deco.length], { x: (rng() - 0.5) * HALF * 1.9, z: (rng() - 0.5) * HALF * 1.9, rotY: rng() * TAU }))
+    }
+
+    await Promise.all(jobs)
   }
 
   // Tile a scaled brick-wall perimeter around the square arena (decorative).

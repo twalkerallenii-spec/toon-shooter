@@ -1,4 +1,5 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js'
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 
 // Loads and caches GLTF/GLB models. The Toon Shooter Game Kit glTF files live in
@@ -10,7 +11,23 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 export class AssetLoader {
   constructor() {
     this.loader = new GLTFLoader()
+    this.collada = new ColladaLoader()
     this.cache = new Map() // path -> gltf
+    this.daeCache = new Map() // path -> collada result
+  }
+
+  // Load a COLLADA (.dae) model (e.g. the car pack). Returns a fresh clone of the
+  // scene each call, or null if missing.
+  async loadCollada(path) {
+    try {
+      if (!this.daeCache.has(path)) {
+        this.daeCache.set(path, await this.collada.loadAsync(path))
+      }
+      return this.daeCache.get(path).scene.clone(true)
+    } catch (err) {
+      console.warn(`[AssetLoader] Could not load DAE "${path}".`, err.message)
+      return null
+    }
   }
 
   async load(path) {

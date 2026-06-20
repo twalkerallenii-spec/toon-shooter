@@ -14,6 +14,8 @@ export class HUD {
       weaponList: document.getElementById('weapon-list'),
       killfeed: document.getElementById('killfeed'),
       stormWarning: document.getElementById('storm-warning'),
+      stormTimer: document.getElementById('storm-timer'),
+      carPrompt: document.getElementById('car-prompt'),
       teamScores: document.getElementById('team-scores'),
       tsRed: document.getElementById('ts-red'),
       tsBlue: document.getElementById('ts-blue'),
@@ -85,6 +87,16 @@ export class HUD {
   clearKillFeed() { this.el.killfeed.innerHTML = '' }
 
   setStorm(on) { this.el.stormWarning.classList.toggle('hidden', !on) }
+  setStormTimer(text) {
+    if (!text) { this.el.stormTimer.classList.add('hidden'); return }
+    this.el.stormTimer.textContent = text
+    this.el.stormTimer.classList.remove('hidden')
+  }
+  setCarPrompt(text) {
+    if (!text) { this.el.carPrompt.classList.add('hidden'); return }
+    this.el.carPrompt.textContent = text
+    this.el.carPrompt.classList.remove('hidden')
+  }
 
   setTeamScores(red, blue, show) {
     this.el.teamScores.classList.toggle('hidden', !show)

@@ -4,21 +4,68 @@ import * as THREE from 'three'
 // provides a placeModel() helper the LevelBuilder uses to drop kit props in with
 // automatic grounding + collision registration.
 export class World {
-  constructor() {
+  constructor({ radius = 75, backdrop = false } = {}) {
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color(0x9fd3ff)
-    this.scene.fog = new THREE.Fog(0x9fd3ff, 90, 260)
+    const sky = backdrop ? 0xffb27a : 0x9fd3ff // warm sunset for the big royale map
+    this.scene.background = new THREE.Color(sky)
+    this.scene.fog = new THREE.Fog(sky, backdrop ? 140 : 90, backdrop ? radius * 3 : 260)
 
-    this.arenaRadius = 75 // half-extent of the square arena (kept name for callers)
+    this.arenaRadius = radius // half-extent of the square arena (kept name for callers)
     this.groundY = 0
     this.obstacles = []   // { mesh, radius, x, z } — used for bullet raycasts
     this.platforms = []   // AABB colliders { minX, maxX, minZ, maxZ, top, bottom } — movement
     this.jumpPads = []    // { x, z, radius, power, mesh }
     this.barrels = []     // explodable barrels: { group, obstacle, x, z, radius, alive }
     this.bases = []       // team base markers: { team, x, z } — used by CTF/objective modes
+    this.carSpawns = []   // { x, z } open spots where the level wants cars placed
 
     this._buildLights()
     this._buildGround()
+    if (backdrop) this._buildBackdrop()
+  }
+
+  // Big open-world backdrop for Battle Royale: a ring of low-poly mountains, a
+  // wide water plane, and a gradient sky dome. Purely visual (no collision) — the
+  // arena clamp stays the real boundary, leaving the whole field open to drive.
+  _buildBackdrop() {
+    const R = this.arenaRadius
+
+    // Sky dome (gradient sunset -> dusk).
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(R * 4, 32, 16),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide, depthWrite: false,
+        uniforms: { top: { value: new THREE.Color(0x2a3a7a) }, bot: { value: new THREE.Color(0xffb27a) } },
+        vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+        fragmentShader: 'varying float h; uniform vec3 top; uniform vec3 bot; void main(){ gl_FragColor = vec4(mix(bot, top, clamp(h*1.2+0.1,0.0,1.0)), 1.0); }',
+      })
+    )
+    this.scene.add(sky)
+
+    // Water plane below the arena edge.
+    const water = new THREE.Mesh(
+      new THREE.PlaneGeometry(R * 8, R * 8),
+      new THREE.MeshStandardMaterial({ color: 0x2f6fb0, roughness: 0.3, metalness: 0.1, transparent: true, opacity: 0.92 })
+    )
+    water.rotation.x = -Math.PI / 2
+    water.position.y = -1.2
+    this.scene.add(water)
+
+    // Ring of low-poly mountains around the arena.
+    const rng = mulberry32(99)
+    const mat = new THREE.MeshStandardMaterial({ color: 0x6b6f63, roughness: 1, flatShading: true })
+    const snow = new THREE.MeshStandardMaterial({ color: 0xeef2f5, roughness: 1, flatShading: true })
+    const count = 48
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + rng() * 0.1
+      const dist = R + 25 + rng() * 60
+      const h = 30 + rng() * 70
+      const rad = 18 + rng() * 26
+      const m = new THREE.Mesh(new THREE.ConeGeometry(rad, h, 5 + Math.floor(rng() * 3), 1), rng() > 0.5 ? snow : mat)
+      m.position.set(Math.cos(a) * dist, h / 2 - 2, Math.sin(a) * dist)
+      m.rotation.y = rng() * Math.PI
+      this.scene.add(m)
+    }
   }
 
   // A glowing pad that launches the player upward when stepped on.
@@ -157,5 +204,14 @@ export class World {
     if (pos.z > max) pos.z = max
     else if (pos.z < -max) pos.z = -max
     return pos
+  }
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }

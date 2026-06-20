@@ -12,6 +12,7 @@ import { Pickups } from '../systems/Pickups.js'
 import { Zone } from '../systems/Zone.js'
 import { Flags } from '../systems/Flags.js'
 import { Player } from '../entities/Player.js'
+import { Vehicle } from '../entities/Vehicle.js'
 import { Grenade } from '../entities/Grenade.js'
 import { Net } from '../net/Net.js'
 import { RemotePlayer } from '../entities/RemotePlayer.js'
@@ -159,7 +160,8 @@ export class Game {
   }
 
   _buildWorld() {
-    this.world = new World()
+    const big = !!this.brMode // Battle Royale gets a big open island with backdrop
+    this.world = new World({ radius: big ? 120 : 75, backdrop: big })
     this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
     this.camera.updateProjectionMatrix()
     this.camera.position.set(0, 1.6, 0)
@@ -180,6 +182,9 @@ export class Game {
     this.pickups = new Pickups({ world: this.world, assets: this.assets, audio: this.audio })
     this.grenades = []
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
+    this.cars = []
+    this.driving = null
+    this._ePrev = false
     this.ctfMode = this.onlineMode === 'ctf'
     this.flags = this.ctfMode ? new Flags(this.world) : null
     this.ctf = null
@@ -193,6 +198,8 @@ export class Game {
     this.player.onJumpPad = () => this.audio.jumpPad()
     this.hud.clearKillFeed()
     this.hud.setStorm(false)
+    this.hud.setStormTimer(null)
+    this.hud.setCarPrompt(null)
     this.hud.hideScoreboard()
     this.hud.hideVictory()
     this.hud.setTeamScores(0, 0, false)
@@ -247,9 +254,78 @@ export class Game {
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
 
-    // Build the selected map from kit environment props.
+    // Build the map: Battle Royale uses the big open "royale" island.
     const { LevelBuilder } = await import('../systems/LevelBuilder.js')
-    await new LevelBuilder({ world: this.world, assets: this.assets }).build(this.selectedMap)
+    const mapKey = this.brMode ? 'royale' : this.selectedMap
+    await new LevelBuilder({ world: this.world, assets: this.assets }).build(mapKey)
+
+    // Spawn drivable cars at the level's open car-spawn points.
+    await this._spawnCars()
+  }
+
+  async _spawnCars() {
+    const spots = this.world.carSpawns
+    if (!spots || !spots.length) return
+    const paths = ['models/cars/Models/Car 1.dae', 'models/cars/Models/Car 2.dae']
+    for (let i = 0; i < spots.length; i++) {
+      const s = spots[i]
+      const car = new Vehicle({ world: this.world, x: s.x, z: s.z, heading: (i * 1.3) % (Math.PI * 2) })
+      this.cars.push(car)
+      this.assets.loadCollada(paths[i % paths.length]).then((scene) => { if (scene) car.setModel(scene) })
+    }
+  }
+
+  // Enter the nearest car, or exit the one being driven (toggled by E).
+  _toggleCar() {
+    if (this.driving) {
+      const car = this.driving
+      this.driving = null
+      car.occupied = false
+      const sx = Math.cos(car.heading), sz = -Math.sin(car.heading)
+      this.player.position.set(car.position.x + sx * 2.8, 0, car.position.z + sz * 2.8)
+      this.player.velocity.set(0, 0, 0)
+      if (this.player.gun) this.player.gun.visible = true
+      return
+    }
+    let best = null, bd = 3.6
+    for (const car of this.cars) {
+      const d = Math.hypot(this.player.position.x - car.position.x, this.player.position.z - car.position.z)
+      if (d < bd) { bd = d; best = car }
+    }
+    if (best) {
+      this.driving = best
+      best.occupied = true
+      if (this.player.gun) this.player.gun.visible = false
+    }
+  }
+
+  _driveUpdate(dt) {
+    const car = this.driving
+    this.input.consumeMouseDelta() // discard look-deltas so FPS cam doesn't snap on exit
+    let throttle = 0, steer = 0
+    if (this.input.isDown('KeyW')) throttle += 1
+    if (this.input.isDown('KeyS')) throttle -= 1
+    if (this.input.isDown('KeyD')) steer += 1
+    if (this.input.isDown('KeyA')) steer -= 1
+    throttle += this.input.touchMove.y || 0
+    steer += this.input.touchMove.x || 0
+    throttle = Math.max(-1, Math.min(1, throttle))
+    steer = Math.max(-1, Math.min(1, steer))
+    car.update(dt, { throttle, steer })
+    // The player rides along (keeps storm damage, score, networking working).
+    this.player.position.set(car.position.x, 0, car.position.z)
+    this.player.velocity.set(0, 0, 0)
+    this.player.onGround = true
+    this._driveCamera(dt, car)
+  }
+
+  // Third-person chase camera behind the car.
+  _driveCamera(dt, car) {
+    const fx = Math.sin(car.heading), fz = Math.cos(car.heading)
+    this._camTarget = this._camTarget || new THREE.Vector3()
+    this._camTarget.set(car.position.x - fx * 9, 6.5, car.position.z - fz * 9)
+    this.camera.position.lerp(this._camTarget, Math.min(1, dt * 6))
+    this.camera.lookAt(car.position.x + fx * 4, 2, car.position.z + fz * 4)
   }
 
   // Swap the FPS viewmodel to the given weapon def (cached load -> instant).
@@ -544,6 +620,11 @@ export class Game {
 
     const dt = Math.min(0.05, this.clock.getDelta())
 
+    // Enter / exit a car with E (edge-triggered).
+    const eDown = this.input.isDown('KeyE')
+    if (eDown && !this._ePrev) this._toggleCar()
+    this._ePrev = eDown
+
     // Weapon switching: number keys + mouse wheel.
     for (let i = 0; i < this.weapons.defs.length; i++) {
       if (this.input.isDown(`Digit${i + 1}`)) this.weapons.switchTo(i)
@@ -554,19 +635,19 @@ export class Game {
     // Reload (R).
     if (this.input.isDown('KeyR')) this.weapons.startReload()
 
-    // Grenade (G).
+    // Grenade (G) — not while driving.
     this._grenadeCd = Math.max(0, this._grenadeCd - dt)
-    if (this.input.isDown('KeyG')) this.throwGrenade()
+    if (this.input.isDown('KeyG') && !this.driving) this.throwGrenade()
 
-    // Aim-down-sights (right mouse).
-    const ads = this.input.mouse.right && this.player.alive
+    // Aim-down-sights (right mouse) — not while driving.
+    const ads = this.input.mouse.right && this.player.alive && !this.driving
     this.player.setADS(ads)
     this.hud.setAds(this.player.adsAmount > 0.5)
 
     // Shooting: auto weapons fire while held; semi-auto fire once per click.
     let firedThisFrame = false
     const click = this.input.consumeClick()
-    const wantFire = this.weapons.auto ? this.input.mouse.down : click
+    const wantFire = (this.weapons.auto ? this.input.mouse.down : click) && !this.driving
     if (wantFire && this.player.alive) {
       const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
       const remotes = this.net ? [...this.remotePlayers.values()] : []
@@ -602,7 +683,23 @@ export class Game {
       }
     }
 
-    this.player.update(dt)
+    if (this.driving) this._driveUpdate(dt)
+    else this.player.update(dt)
+    // Idle cars still settle (friction); the driven one is updated in _driveUpdate.
+    for (const car of this.cars) if (car !== this.driving) car.update(dt)
+
+    // Car prompt.
+    if (this.cars.length) {
+      if (this.driving) this.hud.setCarPrompt('Press E to exit')
+      else {
+        let near = false
+        for (const car of this.cars) {
+          if (Math.hypot(this.player.position.x - car.position.x, this.player.position.z - car.position.z) < 3.6) { near = true; break }
+        }
+        this.hud.setCarPrompt(near ? 'Press E to drive' : null)
+      }
+    }
+
     this.particles.update(dt)
     this.pickups.update(dt, this.player, this.weapons)
 
@@ -638,6 +735,7 @@ export class Game {
     if (this.ctfMode) this._updateCtf(dt)
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))
+      this.hud.setStormTimer(this.zone.statusText())
       // Solo Battle Royale: survive until the storm fully closes -> Victory Royale.
       if (!this.net && this.player.alive && !this._wonBR && this.zone.radius <= this.zone.minR + 0.3) {
         this._wonBR = true

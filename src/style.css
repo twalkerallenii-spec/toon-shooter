@@ -363,6 +363,17 @@ body.touch #rank-btn { display: block; }
   padding: 6px 16px; border-radius: 8px; font-weight: 700; font-size: 14px;
   letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
+#storm-timer {
+  position: absolute; top: 112px; left: 50%; transform: translateX(-50%);
+  color: #e0b3ff; font-weight: 700; font-size: 15px; letter-spacing: 1px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+}
+#car-prompt {
+  position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.3);
+  color: #fff; font-weight: 700; font-size: 15px; letter-spacing: 1px;
+  padding: 6px 14px; border-radius: 8px;
+}
 
 .controls {
   list-style: none; margin-top: 26px;
