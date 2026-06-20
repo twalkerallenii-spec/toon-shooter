@@ -74,12 +74,16 @@ export class Game {
       else if (this.state === STATE.PAUSED) this.resume()
     })
 
-    // Multiplayer: prefill server from ?server= and wire the PLAY ONLINE button.
+    // Multiplayer: server URL precedence = ?server= > saved > empty.
+    // Remembered in localStorage so you don't retype your Render URL.
     const params = new URLSearchParams(location.search)
     const serverInput = document.getElementById('mp-server')
-    if (params.get('server')) serverInput.value = params.get('server')
+    const savedServer = localStorage.getItem('ts_server') || ''
+    serverInput.value = params.get('server') || savedServer
+    serverInput.addEventListener('change', () => localStorage.setItem('ts_server', serverInput.value.trim()))
     document.getElementById('online-btn').addEventListener('click', () => {
       if (this.state === STATE.PLAYING) return
+      localStorage.setItem('ts_server', serverInput.value.trim())
       this.startOnline()
     })
 

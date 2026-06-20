@@ -1,0 +1,15 @@
+# Render blueprint for the Toon Shooter multiplayer relay server.
+# Deploy: push this repo to GitHub, then in Render -> New -> Blueprint, pick this
+# repo. Render auto-detects render.yaml and creates the service below.
+# It serves HTTPS + WSS automatically at https://<name>.onrender.com
+# Point the game client at it with ?server=wss://<name>.onrender.com
+services:
+  - type: web
+    name: toon-shooter-server
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /
+    autoDeploy: true

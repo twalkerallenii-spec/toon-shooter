@@ -12,9 +12,17 @@
 // Then point the client at it with ?server=wss://your-host
 
 import { WebSocketServer } from 'ws'
+import http from 'http'
 
 const PORT = process.env.PORT || 8080
-const wss = new WebSocketServer({ port: PORT })
+
+// Plain HTTP responder so hosts (Render) get a healthy 200 on GET / and the
+// WebSocket upgrade shares the same port.
+const httpServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' })
+  res.end('Toon Shooter relay server is running.\n')
+})
+const wss = new WebSocketServer({ server: httpServer })
 
 // room -> Map(id -> { ws, name, state })
 const rooms = new Map()
@@ -137,4 +145,6 @@ wss.on('connection', (ws) => {
   })
 })
 
-console.log(`Toon Shooter relay server listening on ws://localhost:${PORT}`)
+httpServer.listen(PORT, () => {
+  console.log(`Toon Shooter relay server listening on port ${PORT}`)
+})
