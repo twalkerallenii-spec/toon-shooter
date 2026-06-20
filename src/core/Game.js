@@ -154,7 +154,7 @@ export class Game {
     this.spawner = new Spawner({ world: this.world, assets: this.assets, weapons: this.weapons })
     this.pickups = new Pickups({ world: this.world, assets: this.assets, audio: this.audio })
     this.grenades = []
-    this.zone = this.brMode ? new Zone(this.world) : null
+    this.zone = this.brMode ? new Zone(this.world, this.particles) : null
     this.score = 0
     this._prevHp = this.player.maxHp
     this._deadHandled = false

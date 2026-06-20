@@ -245,7 +245,9 @@ export class Player {
   // Climb/vault: if a low-enough ledge is right in front of the player, hop on
   // top of it. Returns true if it vaulted.
   _tryVault() {
-    const r = 0.5, mantleMax = 2.4
+    // Climb onto whatever you're standing next to — large reach so it works on
+    // essentially any object (crates, containers, buildings, stacks).
+    const r = 0.5, mantleMax = 12
     const p = this.position
     let best = null
     for (const b of this.world.platforms) {
@@ -256,7 +258,8 @@ export class Player {
       const cx = Math.max(b.minX, Math.min(p.x, b.maxX))
       const cz = Math.max(b.minZ, Math.min(p.z, b.maxZ))
       const d = Math.hypot(p.x - cx, p.z - cz)
-      if (d > r + 0.6) continue
+      if (d > r + 0.7) continue
+      // Prefer the LOWEST climbable ledge so you climb one step at a time.
       if (!best || b.top < best.top) best = b
     }
     if (!best) return false
