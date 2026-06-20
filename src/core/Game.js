@@ -135,6 +135,25 @@ export class Game {
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR' && this.state === STATE.PLAYING) this.weapons.startReload()
+      if (e.code === 'Tab') { e.preventDefault(); if (this.state === STATE.PLAYING) this.hud.showScoreboard(this._scoreboardRows()) }
+    })
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Tab') this.hud.hideScoreboard()
+    })
+
+    // Mobile RANK button (toggle).
+    const rankBtn = document.getElementById('rank-btn')
+    rankBtn.addEventListener('click', () => {
+      if (this.hud.el.scoreboard.classList.contains('hidden')) this.hud.showScoreboard(this._scoreboardRows())
+      else this.hud.hideScoreboard()
+    })
+
+    // Victory screen -> back to menu.
+    document.getElementById('victory-btn').addEventListener('click', () => {
+      this.hud.hideVictory()
+      this.state = STATE.MENU
+      this.hud.hide()
+      this.hud.showOverlay('Survive the waves, or take the win. Click to lock your mouse and shoot.', 'PLAY')
     })
   }
 
@@ -161,6 +180,8 @@ export class Game {
     this.grenades = []
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
     this.score = 0
+    this.enemyKills = 0
+    this._wonBR = false
     this._prevHp = this.player.maxHp
     this._deadHandled = false
     this._lastAttacker = null
@@ -168,6 +189,8 @@ export class Game {
     this.player.onJumpPad = () => this.audio.jumpPad()
     this.hud.clearKillFeed()
     this.hud.setStorm(false)
+    this.hud.hideScoreboard()
+    this.hud.hideVictory()
     this._applySettings()
 
     // HUD hooks
@@ -184,6 +207,7 @@ export class Game {
     this.spawner.onWaveStart = (w) => this.hud.setWave(w)
     this.spawner.onKill = (pos) => {
       this.score += 10
+      this.enemyKills = (this.enemyKills || 0) + 1
       this.hud.setScore(this.score)
       if (pos) this.pickups.rollDrop(pos.x, pos.z)
     }
@@ -267,7 +291,13 @@ export class Game {
           this.peerNames.set(id, this._selfName)
           this.kills = 0; this.deaths = 0
           this.hud.setScore('0/0')
-          for (const peer of peers) this._addRemote(peer.id, peer.name, peer.p, peer.team)
+          // Scoreboard: id -> { name, kills, deaths, team }
+          this.board = new Map()
+          this.board.set(id, { name: this._selfName, kills: 0, deaths: 0, team })
+          for (const peer of peers) {
+            this._addRemote(peer.id, peer.name, peer.p, peer.team)
+            this.board.set(peer.id, { name: peer.name, kills: 0, deaths: 0, team: peer.team })
+          }
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
           this.hud.show()
@@ -276,10 +306,14 @@ export class Game {
           this.clock.getDelta()
           this._loop()
         },
-        onPeerJoin: (id, pname, team) => this._addRemote(id, pname, null, team),
+        onPeerJoin: (id, pname, team) => {
+          this._addRemote(id, pname, null, team)
+          this.board?.set(id, { name: pname, kills: 0, deaths: 0, team })
+        },
         onPeerLeave: (id) => {
           this.remotePlayers.get(id)?.dispose()
           this.remotePlayers.delete(id)
+          this.board?.delete(id)
         },
         onState: (id, p) => this.remotePlayers.get(id)?.setState(p),
         onShoot: (id, from, to) => {
@@ -361,15 +395,37 @@ export class Game {
     if (this.state === STATE.PLAYING && !this.input.isTouch) this.input.requestLock()
   }
 
+  // Show the victory/defeat screen and stop play.
+  _winMatch(title, sub, win = true) {
+    this.state = STATE.DEAD
+    if (!this.input.isTouch) this.input.exitLock()
+    this.hud.showVictory(title, sub, win)
+  }
+
   _onKilled(byId, victimId) {
     const killer = byId != null ? (this.peerNames?.get(byId) || `Player${byId}`) : 'the world'
     const victim = victimId === this.net?.id ? this._selfName : (this.peerNames?.get(victimId) || `Player${victimId}`)
     this.hud.addKillFeed(`${killer} ▸ ${victim}`)
+    // Scoreboard tallies (consistent on every client — all receive 'killed').
+    if (this.board) {
+      if (byId != null && byId !== victimId && this.board.has(byId)) this.board.get(byId).kills++
+      if (this.board.has(victimId)) this.board.get(victimId).deaths++
+    }
     if (byId === this.net?.id && victimId !== this.net?.id) {
       this.kills = (this.kills || 0) + 1
       this.deaths = this.deaths || 0
       this.hud.setScore(`${this.kills}/${this.deaths}`)
     }
+  }
+
+  // Build sorted scoreboard rows (online: from this.board; solo: just you).
+  _scoreboardRows() {
+    if (this.board && this.net) {
+      return [...this.board.entries()]
+        .map(([id, r]) => ({ ...r, you: id === this.net.id }))
+        .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)
+    }
+    return [{ name: this._selfName || 'You', kills: this.enemyKills || 0, deaths: this.player?.alive ? 0 : 1, you: true }]
   }
 
   _disconnect() {
@@ -501,7 +557,14 @@ export class Game {
     // Enemies: on in solo (incl. solo BR storm) and online co-op; off in PvP modes.
     const pvpMode = this.onlineMode === 'dm' || this.onlineMode === 'team' || this.onlineMode === 'br'
     if (!pvpMode) this.spawner.update(dt, this.player, this.camera)
-    if (this.zone) this.hud.setStorm(this.zone.update(dt, this.player))
+    if (this.zone) {
+      this.hud.setStorm(this.zone.update(dt, this.player))
+      // Solo Battle Royale: survive until the storm fully closes -> Victory Royale.
+      if (!this.net && this.player.alive && !this._wonBR && this.zone.radius <= this.zone.minR + 0.3) {
+        this._wonBR = true
+        this._winMatch('#1 VICTORY ROYALE', `You outlasted the storm. Kills: ${this.enemyKills || 0}.`)
+      }
+    }
 
     this.hud.setHp(this.player.hp, this.player.maxHp)
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)

@@ -49,6 +49,24 @@
       </div>
 
       <div id="ads-vignette"></div>
+
+      <!-- Scoreboard (hold Tab, or tap RANK on mobile) -->
+      <div id="scoreboard" class="hidden">
+        <div class="sb-title">RANKINGS</div>
+        <table><thead><tr><th>#</th><th>Player</th><th>Kills</th><th>Deaths</th></tr></thead>
+          <tbody id="sb-body"></tbody>
+        </table>
+      </div>
+      <button id="rank-btn">RANK</button>
+    </div>
+
+    <!-- Victory / defeat screen -->
+    <div id="victory" class="hidden">
+      <div class="vic-inner">
+        <h1 id="vic-title">#1 VICTORY ROYALE</h1>
+        <p id="vic-sub"></p>
+        <button id="victory-btn">PLAY AGAIN</button>
+      </div>
     </div>
 
     <!-- Start / pause / game-over overlay -->

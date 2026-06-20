@@ -5,7 +5,7 @@ export const WEAPONS = [
   { key: 'Pistol',  model: 'Pistol',  damage: 26, fireRate: 6,  mag: 14, spread: 0.012, pellets: 1, auto: false, range: 200, reload: 1.0, adsFov: 55, recoil: 0.05 },
   { key: 'AK',      model: 'AK',      damage: 30, fireRate: 9,  mag: 30, spread: 0.022, pellets: 1, auto: true,  range: 220, reload: 1.4, adsFov: 50, recoil: 0.05 },
   { key: 'SMG',     model: 'SMG',     damage: 17, fireRate: 14, mag: 30, spread: 0.030, pellets: 1, auto: true,  range: 160, reload: 1.3, adsFov: 55, recoil: 0.035 },
-  { key: 'Shotgun', model: 'Shotgun', damage: 13, fireRate: 1.4, mag: 6, spread: 0.10,  pellets: 9, auto: false, range: 70,  reload: 0.9, adsFov: 60, recoil: 0.12 },
+  { key: 'Shotgun', model: 'Shotgun', damage: 13, fireRate: 1.4, mag: 6, spread: 0.085, pellets: 10, auto: false, range: 140, reload: 0.9, adsFov: 60, recoil: 0.12 },
   { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16 },
   { key: 'GL',      model: 'GrenadeLauncher', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
 ]

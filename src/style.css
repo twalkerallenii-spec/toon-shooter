@@ -204,6 +204,49 @@ body.touch #mobile-controls { display: block; }
 .m-jump { background: rgba(61, 169, 252, 0.3); border-color: #3da9fc; }
 .m-btn.on { background: rgba(255, 203, 61, 0.5); border-color: var(--accent); }
 
+/* ---- Scoreboard ---- */
+#scoreboard {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(10, 14, 30, 0.92); border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px; padding: 20px 26px; min-width: 360px; z-index: 8;
+}
+.sb-title { text-align: center; font-size: 16px; letter-spacing: 4px; color: var(--accent); margin-bottom: 12px; }
+#scoreboard table { width: 100%; border-collapse: collapse; }
+#scoreboard th { font-size: 12px; letter-spacing: 1px; opacity: 0.7; text-align: left; padding: 4px 12px; }
+#scoreboard td { font-size: 16px; padding: 5px 12px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+#scoreboard tr.you td { color: var(--accent); font-weight: 700; }
+#scoreboard td.t-red { color: #ff6b6b; }
+#scoreboard td.t-blue { color: #6aa8ff; }
+
+#rank-btn {
+  position: absolute; top: 16px; left: 16px; pointer-events: auto; display: none;
+  font: inherit; font-size: 13px; font-weight: 700; color: #fff;
+  background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+body.touch #rank-btn { display: block; }
+
+/* ---- Victory / defeat screen ---- */
+#victory {
+  position: fixed; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 35%, rgba(40, 30, 70, 0.85), rgba(5, 6, 14, 0.96));
+}
+.vic-inner { text-align: center; }
+#vic-title {
+  font-size: 64px; letter-spacing: 4px; font-weight: 900;
+  color: var(--accent); text-shadow: 0 0 24px rgba(255, 203, 61, 0.6), 0 4px 0 rgba(0, 0, 0, 0.4);
+  animation: vicpop 0.5s ease-out;
+}
+#victory.defeat #vic-title { color: #ff5a5a; text-shadow: 0 0 24px rgba(255, 80, 80, 0.5); }
+#vic-sub { opacity: 0.85; margin: 14px 0 26px; font-size: 18px; }
+@keyframes vicpop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+#victory-btn {
+  font: inherit; font-size: 20px; font-weight: 800; letter-spacing: 2px;
+  color: #1a1300; background: var(--accent); border: none; border-radius: 12px;
+  padding: 12px 40px; cursor: pointer; box-shadow: 0 6px 0 #b8901f;
+}
+
 /* ---------- Overlay ---------- */
 #overlay {
   position: fixed; inset: 0;

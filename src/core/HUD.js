@@ -17,6 +17,11 @@ export class HUD {
       voteToggle: document.getElementById('vote-toggle'),
       votePanel: document.getElementById('vote-panel'),
       adsVignette: document.getElementById('ads-vignette'),
+      scoreboard: document.getElementById('scoreboard'),
+      sbBody: document.getElementById('sb-body'),
+      victory: document.getElementById('victory'),
+      vicTitle: document.getElementById('vic-title'),
+      vicSub: document.getElementById('vic-sub'),
       overlay: document.getElementById('overlay'),
       overlayMsg: document.getElementById('overlay-msg'),
       startBtn: document.getElementById('start-btn'),
@@ -77,6 +82,25 @@ export class HUD {
 
   setStorm(on) { this.el.stormWarning.classList.toggle('hidden', !on) }
 
+  // Scoreboard: rows = [{ name, kills, deaths, team, you }] (already sorted).
+  showScoreboard(rows) {
+    this.el.sbBody.innerHTML = rows.map((r, i) => {
+      const tc = r.team === 'red' ? 't-red' : r.team === 'blue' ? 't-blue' : ''
+      return `<tr class="${r.you ? 'you' : ''}"><td>${i + 1}</td><td class="${tc}">${escapeHtml(r.name)}${r.you ? ' (you)' : ''}</td><td>${r.kills}</td><td>${r.deaths}</td></tr>`
+    }).join('')
+    this.el.scoreboard.classList.remove('hidden')
+  }
+  hideScoreboard() { this.el.scoreboard.classList.add('hidden') }
+
+  // Victory / defeat screen. win=true -> gold, false -> red.
+  showVictory(title, sub, win = true) {
+    this.el.vicTitle.textContent = title
+    this.el.vicSub.textContent = sub || ''
+    this.el.victory.classList.toggle('defeat', !win)
+    this.el.victory.classList.remove('hidden')
+  }
+  hideVictory() { this.el.victory.classList.add('hidden') }
+
   showVoteToggle(on) {
     this.el.voteToggle.classList.toggle('hidden', !on)
     if (!on) this.el.votePanel.classList.add('hidden')
@@ -118,4 +142,10 @@ export class HUD {
   hideOverlay() {
     this.el.overlay.classList.add('hidden')
   }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
 }
