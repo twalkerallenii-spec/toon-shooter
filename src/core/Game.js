@@ -78,8 +78,9 @@ export class Game {
     // Remembered in localStorage so you don't retype your Render URL.
     const params = new URLSearchParams(location.search)
     const serverInput = document.getElementById('mp-server')
+    const DEFAULT_SERVER = 'wss://toon-shooter-server.onrender.com'
     const savedServer = localStorage.getItem('ts_server') || ''
-    serverInput.value = params.get('server') || savedServer
+    serverInput.value = params.get('server') || savedServer || DEFAULT_SERVER
     serverInput.addEventListener('change', () => localStorage.setItem('ts_server', serverInput.value.trim()))
     document.getElementById('online-btn').addEventListener('click', () => {
       if (this.state === STATE.PLAYING) return
@@ -249,7 +250,7 @@ export class Game {
     const status = document.getElementById('mp-status')
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
     const room = (document.getElementById('mp-room').value || 'lobby').trim()
-    const url = (document.getElementById('mp-server').value || 'ws://localhost:8080').trim()
+    const url = (document.getElementById('mp-server').value || 'wss://toon-shooter-server.onrender.com').trim()
     this.onlineMode = document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
     this.brMode = this.onlineMode === 'br'
     status.textContent = 'Connecting…'
