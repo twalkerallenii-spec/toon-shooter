@@ -62,6 +62,42 @@ function handleVote(room, voterId, map) {
   if (room._votes.size >= room.size) finalizeVote(room)
 }
 
+const CTF_LIMIT = 3
+function ctfState(room) {
+  if (!room.ctf) {
+    room.ctf = {
+      scores: { red: 0, blue: 0 },
+      flags: {
+        red: { state: 'home', holder: null, x: 0, z: 0 },
+        blue: { state: 'home', holder: null, x: 0, z: 0 },
+      },
+    }
+  }
+  return room.ctf
+}
+
+// Drop any flags a leaving/dead player was carrying (returns them home).
+function dropFlagsHeldBy(room, id) {
+  if (!room.ctf) return
+  let changed = false
+  for (const k of ['red', 'blue']) {
+    const f = room.ctf.flags[k]
+    if (f.holder === id) { f.state = 'home'; f.holder = null; changed = true }
+  }
+  if (changed) broadcast(room, { t: 'ctf', ctf: room.ctf })
+}
+
+// Battle royale: when one player remains in a started match, they win.
+function checkBattleRoyaleWin(room, deadId) {
+  if (room._mode !== 'br' || !room._alive || !room._brStarted) return
+  room._alive.delete(deadId)
+  if (room._alive.size === 1) {
+    const [winner] = [...room._alive]
+    broadcast(room, { t: 'win', id: winner, reason: 'br' })
+    room._brStarted = false
+  }
+}
+
 function finalizeVote(room) {
   if (room._voteTimer) { clearTimeout(room._voteTimer); room._voteTimer = null }
   const tally = {}
@@ -93,14 +129,23 @@ wss.on('connection', (ws) => {
       let red = 0, blue = 0
       for (const [, peer] of room) { if (peer.team === 'red') red++; else if (peer.team === 'blue') blue++ }
       const team = red <= blue ? 'red' : 'blue'
+      ws.mode = msg.mode || 'coop'
+      room._mode = ws.mode
       room.set(id, { ws, name, state: msg.p || null, team })
+
+      // Battle-royale alive tracking (for last-standing victory).
+      if (ws.mode === 'br') {
+        room._alive = room._alive || new Set()
+        room._alive.add(id)
+        if (room._alive.size >= 2) room._brStarted = true
+      }
 
       // Tell the newcomer who's already here.
       const peers = []
       for (const [pid, peer] of room) {
         if (pid !== id) peers.push({ id: pid, name: peer.name, p: peer.state, team: peer.team })
       }
-      send(ws, { t: 'welcome', id, team, peers })
+      send(ws, { t: 'welcome', id, team, peers, ctf: room.ctf || null })
       broadcast(room, { t: 'peerJoin', id, name, team }, id)
       console.log(`[+] ${name} (#${id}, ${team}) joined "${roomName}" — ${room.size} in room`)
       return
@@ -128,10 +173,40 @@ wss.on('connection', (ws) => {
       case 'killed':
         // Victim reports who killed them; tell the whole room (kill feed + score).
         broadcast(room, { t: 'killed', by: msg.by, victim: ws.id })
+        dropFlagsHeldBy(room, ws.id)
+        checkBattleRoyaleWin(room, ws.id)
         break
       case 'vote':
         handleVote(room, ws.id, msg.map)
         break
+
+      // ---- Capture the Flag ----
+      case 'flagTake': {
+        const c = ctfState(room); const f = c.flags[msg.flag]
+        if (f && f.state !== 'carried') { f.state = 'carried'; f.holder = ws.id; broadcast(room, { t: 'ctf', ctf: c }) }
+        break
+      }
+      case 'flagDrop': {
+        const c = ctfState(room); const f = c.flags[msg.flag]
+        if (f && f.holder === ws.id) { f.state = 'dropped'; f.holder = null; f.x = msg.x; f.z = msg.z; broadcast(room, { t: 'ctf', ctf: c }) }
+        break
+      }
+      case 'flagReturn': {
+        const c = ctfState(room); const f = c.flags[msg.flag]
+        if (f && f.state === 'dropped') { f.state = 'home'; f.holder = null; broadcast(room, { t: 'ctf', ctf: c }) }
+        break
+      }
+      case 'flagCapture': {
+        const c = ctfState(room); const f = c.flags[msg.flag]
+        if (f && f.holder === ws.id) {
+          f.state = 'home'; f.holder = null
+          const t = me?.team === 'red' ? 'red' : 'blue'
+          c.scores[t] = (c.scores[t] || 0) + 1
+          broadcast(room, { t: 'ctf', ctf: c })
+          if (c.scores[t] >= CTF_LIMIT) broadcast(room, { t: 'win', team: t, reason: 'ctf' })
+        }
+        break
+      }
     }
   })
 
@@ -140,6 +215,8 @@ wss.on('connection', (ws) => {
       const room = rooms.get(ws.room)
       room.delete(ws.id)
       broadcast(room, { t: 'peerLeave', id: ws.id })
+      dropFlagsHeldBy(room, ws.id)
+      checkBattleRoyaleWin(room, ws.id)
       if (room.size === 0) rooms.delete(ws.room)
     }
   })

@@ -40,6 +40,13 @@
       <canvas id="minimap" width="170" height="170"></canvas>
       <div id="storm-warning" class="hidden">⚠ THE STORM IS DAMAGING YOU — GET TO THE ZONE</div>
 
+      <div id="team-scores" class="hidden">
+        <span class="ts-red">RED <b id="ts-red">0</b></span>
+        <span class="ts-vs">—</span>
+        <span class="ts-blue">BLUE <b id="ts-blue">0</b></span>
+        <div id="ts-msg"></div>
+      </div>
+
       <button id="vote-toggle" class="hidden">🗳 VOTE MAP</button>
       <div id="vote-panel" class="hidden">
         <div class="vote-title">VOTE NEXT MAP</div>
@@ -106,6 +113,7 @@
             <button class="mode-btn" data-mode="dm">Deathmatch</button>
             <button class="mode-btn" data-mode="team">Team DM</button>
             <button class="mode-btn" data-mode="br">Battle Royale</button>
+            <button class="mode-btn" data-mode="ctf">Capture the Flag</button>
           </div>
           <button id="online-btn">PLAY ONLINE</button>
           <div id="mp-status"></div>

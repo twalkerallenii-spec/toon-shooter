@@ -138,6 +138,17 @@ body {
 }
 @keyframes kfIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; } }
 
+/* Team scores (CTF / Team modes) */
+#team-scores {
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+  text-align: center; font-weight: 800; font-size: 22px; letter-spacing: 1px;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.7);
+}
+#team-scores .ts-red { color: #ff6b6b; }
+#team-scores .ts-blue { color: #6aa8ff; }
+#team-scores .ts-vs { opacity: 0.6; margin: 0 10px; }
+#ts-msg { font-size: 14px; font-weight: 700; color: var(--accent); margin-top: 4px; letter-spacing: 0.5px; }
+
 /* Map voting */
 #vote-toggle {
   position: absolute; top: 16px; left: 50%; transform: translateX(-50%);

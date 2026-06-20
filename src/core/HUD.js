@@ -14,6 +14,10 @@ export class HUD {
       weaponList: document.getElementById('weapon-list'),
       killfeed: document.getElementById('killfeed'),
       stormWarning: document.getElementById('storm-warning'),
+      teamScores: document.getElementById('team-scores'),
+      tsRed: document.getElementById('ts-red'),
+      tsBlue: document.getElementById('ts-blue'),
+      tsMsg: document.getElementById('ts-msg'),
       voteToggle: document.getElementById('vote-toggle'),
       votePanel: document.getElementById('vote-panel'),
       adsVignette: document.getElementById('ads-vignette'),
@@ -81,6 +85,12 @@ export class HUD {
   clearKillFeed() { this.el.killfeed.innerHTML = '' }
 
   setStorm(on) { this.el.stormWarning.classList.toggle('hidden', !on) }
+
+  setTeamScores(red, blue, show) {
+    this.el.teamScores.classList.toggle('hidden', !show)
+    if (show) { this.el.tsRed.textContent = red; this.el.tsBlue.textContent = blue }
+  }
+  setObjective(text) { this.el.tsMsg.textContent = text || '' }
 
   // Scoreboard: rows = [{ name, kills, deaths, team, you }] (already sorted).
   showScoreboard(rows) {

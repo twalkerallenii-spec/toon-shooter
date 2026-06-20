@@ -10,6 +10,7 @@ import { Particles } from '../systems/Particles.js'
 import { Audio } from '../systems/Audio.js'
 import { Pickups } from '../systems/Pickups.js'
 import { Zone } from '../systems/Zone.js'
+import { Flags } from '../systems/Flags.js'
 import { Player } from '../entities/Player.js'
 import { Grenade } from '../entities/Grenade.js'
 import { Net } from '../net/Net.js'
@@ -179,6 +180,9 @@ export class Game {
     this.pickups = new Pickups({ world: this.world, assets: this.assets, audio: this.audio })
     this.grenades = []
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
+    this.ctfMode = this.onlineMode === 'ctf'
+    this.flags = this.ctfMode ? new Flags(this.world) : null
+    this.ctf = null
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
@@ -191,6 +195,8 @@ export class Game {
     this.hud.setStorm(false)
     this.hud.hideScoreboard()
     this.hud.hideVictory()
+    this.hud.setTeamScores(0, 0, false)
+    this.hud.setObjective('')
     this._applySettings()
 
     // HUD hooks
@@ -283,7 +289,7 @@ export class Game {
     this._resetGameObjects()
 
     this.net = new Net({
-      url, name, room,
+      url, name, room, mode: this.onlineMode,
       handlers: {
         onWelcome: (id, peers, team) => {
           status.textContent = ''
@@ -302,6 +308,7 @@ export class Game {
           this.hud.hideOverlay()
           this.hud.show()
           this.hud.showVoteToggle(true)
+          if (this.ctfMode) { this._needBaseSpawn = true; this.hud.setTeamScores(0, 0, true) }
           if (!this.input.isTouch) this.input.requestLock()
           this.clock.getDelta()
           this._loop()
@@ -329,6 +336,12 @@ export class Game {
         onKilled: (byId, victimId) => this._onKilled(byId, victimId),
         onVotes: (tally) => this.hud.setVotes(tally),
         onMapChange: (map) => this._applyMapChange(map),
+        onCtf: (ctf) => {
+          this.ctf = ctf
+          this.flags?.setState(ctf)
+          this.hud.setTeamScores(ctf.scores.red, ctf.scores.blue, this.ctfMode)
+        },
+        onWin: (msg) => this._onWin(msg),
         onError: () => { status.textContent = 'Connection failed. Is the server running?' },
         onClose: () => { if (this.state === STATE.PLAYING) status.textContent = 'Disconnected.' },
       },
@@ -347,9 +360,9 @@ export class Game {
     this.peerNames?.set(id, name)
   }
 
-  // ally / enemy / null — teams only matter in Team Deathmatch.
+  // ally / enemy / null — teams matter in Team Deathmatch and CTF.
   _relationTo(team) {
-    if (this.onlineMode !== 'team' || !team || !this.myTeam) return null
+    if ((this.onlineMode !== 'team' && this.onlineMode !== 'ctf') || !team || !this.myTeam) return null
     return team === this.myTeam ? 'ally' : 'enemy'
   }
 
@@ -360,6 +373,13 @@ export class Game {
     this.kills = this.kills || 0
     this.deaths = (this.deaths || 0) + 1
     this.hud.setScore(`${this.kills}/${this.deaths}`)
+    // CTF: drop the enemy flag where you died.
+    if (this.ctfMode && this.ctf && this.myTeam) {
+      const enemyColor = this.myTeam === 'red' ? 'blue' : 'red'
+      if (this.ctf.flags[enemyColor]?.holder === this.net.id) {
+        this.net.sendFlagDrop(enemyColor, this.player.position.x, this.player.position.z)
+      }
+    }
     // Battle royale = no respawn; you're eliminated.
     if (this.brMode) {
       this.state = STATE.DEAD
@@ -371,9 +391,15 @@ export class Game {
   }
 
   _respawn() {
-    const a = Math.random() * Math.PI * 2
-    const r = this.world.arenaRadius - 6
-    this.player.position.set(Math.cos(a) * r, 0, Math.sin(a) * r)
+    // CTF/team: respawn at your base; otherwise a random edge.
+    const base = (this.ctfMode || this.onlineMode === 'team') && this.world.bases.find((b) => b.team === this.myTeam)
+    if (base) {
+      this.player.position.set(base.x + (Math.random() - 0.5) * 6, 0, base.z + (Math.random() - 0.5) * 6)
+    } else {
+      const a = Math.random() * Math.PI * 2
+      const r = this.world.arenaRadius - 6
+      this.player.position.set(Math.cos(a) * r, 0, Math.sin(a) * r)
+    }
     this.player.velocity.set(0, 0, 0)
     this.player.hp = this.player.maxHp
     this.player.alive = true
@@ -400,6 +426,58 @@ export class Game {
     this.state = STATE.DEAD
     if (!this.input.isTouch) this.input.exitLock()
     this.hud.showVictory(title, sub, win)
+  }
+
+  _onWin(msg) {
+    if (msg.reason === 'ctf') {
+      const won = msg.team === this.myTeam
+      this._winMatch(won ? 'VICTORY' : 'DEFEAT', `${String(msg.team).toUpperCase()} team wins the flag battle!`, won)
+    } else if (msg.reason === 'br') {
+      const won = msg.id === this.net?.id
+      this._winMatch(won ? '#1 VICTORY ROYALE' : 'Match Over', won ? "You're the last one standing." : 'Better luck next drop.', won)
+    }
+  }
+
+  _doBaseSpawn() {
+    const b = this.world.bases.find((bb) => bb.team === this.myTeam)
+    if (b) { this.player.position.set(b.x, 0, b.z); this.player.velocity.set(0, 0, 0) }
+  }
+
+  _flagCtx() {
+    return { localId: this.net?.id, localPos: this.player.position, remotePlayers: this.remotePlayers }
+  }
+
+  // Capture-the-Flag interactions (run each frame in CTF). Server is authoritative;
+  // we just send intents based on proximity and render flags.
+  _updateCtf(dt) {
+    if (this._needBaseSpawn && this.world.bases.length) { this._doBaseSpawn(); this._needBaseSpawn = false }
+    const id = this.net?.id
+    if (this.ctf && this.myTeam && id != null) {
+      const myColor = this.myTeam, enemyColor = myColor === 'red' ? 'blue' : 'red'
+      const ef = this.ctf.flags[enemyColor], mf = this.ctf.flags[myColor]
+      const p = this.player.position
+      const homePos = (team) => { const b = this.world.bases.find((bb) => bb.team === team); return b ? { x: b.x, z: b.z } : { x: 0, z: 0 } }
+      const carrying = ef.holder === id
+
+      if (this.player.alive && !carrying && ef.state !== 'carried') {
+        const fp = ef.state === 'dropped' ? ef : homePos(enemyColor)
+        if (Math.hypot(p.x - fp.x, p.z - fp.z) < 3) this.net.sendFlagTake(enemyColor)
+      }
+      if (this.player.alive && carrying && mf.state === 'home') {
+        const b = homePos(myColor)
+        if (Math.hypot(p.x - b.x, p.z - b.z) < 5.5) this.net.sendFlagCapture(enemyColor)
+      }
+      if (this.player.alive && mf.state === 'dropped' && Math.hypot(p.x - mf.x, p.z - mf.z) < 3) {
+        this.net.sendFlagReturn(myColor)
+      }
+
+      // Objective hint.
+      let msg = 'Grab the enemy flag →'
+      if (carrying) msg = '🚩 You have the enemy flag — run it to your base!'
+      else if (mf.state !== 'home') msg = '⚠ Your flag was taken — get it back!'
+      this.hud.setObjective(msg)
+    }
+    this.flags?.update(dt, this._flagCtx())
   }
 
   _onKilled(byId, victimId) {
@@ -555,8 +633,9 @@ export class Game {
     this.hud.setCrosshairSpread(spread)
     this.weapons.update(dt)
     // Enemies: on in solo (incl. solo BR storm) and online co-op; off in PvP modes.
-    const pvpMode = this.onlineMode === 'dm' || this.onlineMode === 'team' || this.onlineMode === 'br'
+    const pvpMode = this.onlineMode === 'dm' || this.onlineMode === 'team' || this.onlineMode === 'br' || this.onlineMode === 'ctf'
     if (!pvpMode) this.spawner.update(dt, this.player, this.camera)
+    if (this.ctfMode) this._updateCtf(dt)
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))
       // Solo Battle Royale: survive until the storm fully closes -> Victory Royale.
