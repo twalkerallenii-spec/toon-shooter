@@ -160,8 +160,8 @@ export class Game {
   }
 
   _buildWorld() {
-    const big = !!this.brMode // Battle Royale gets a big open island with backdrop
-    this.world = new World({ radius: big ? 120 : 75, backdrop: big })
+    const big = !!this.brMode // Battle Royale gets a big chunked city with backdrop
+    this.world = new World({ radius: big ? 150 : 75, backdrop: big })
     this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
     this.camera.updateProjectionMatrix()
     this.camera.position.set(0, 1.6, 0)
@@ -266,12 +266,18 @@ export class Game {
   async _spawnCars() {
     const spots = this.world.carSpawns
     if (!spots || !spots.length) return
-    const paths = ['models/cars/Models/Car 1.dae', 'models/cars/Models/Car 2.dae']
-    for (let i = 0; i < spots.length; i++) {
-      const s = spots[i]
+    // Mix of the upload's .dae cars and the city pack's redCar.glb.
+    const paths = ['models/cars/Models/Car 1.dae', 'models/city/redCar.glb', 'models/cars/Models/Car 2.dae']
+    const MAX = Math.min(spots.length, 14) // cap cars for performance
+    for (let i = 0; i < MAX; i++) {
+      const s = spots[Math.floor((i / MAX) * spots.length)]
       const car = new Vehicle({ world: this.world, x: s.x, z: s.z, heading: (i * 1.3) % (Math.PI * 2) })
       this.cars.push(car)
-      this.assets.loadCollada(paths[i % paths.length]).then((scene) => { if (scene) car.setModel(scene) })
+      const path = paths[i % paths.length]
+      const loaded = path.endsWith('.glb')
+        ? this.assets.loadModel(path).then((m) => m && m.scene)
+        : this.assets.loadCollada(path)
+      loaded.then((scene) => { if (scene) car.setModel(scene) })
     }
   }
 

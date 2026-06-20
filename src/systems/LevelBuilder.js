@@ -30,64 +30,82 @@ export class LevelBuilder {
     return this.buildArena()
   }
 
-  // ROYALE: a big, open Battle Royale island. Sparse clustered cover with wide
-  // open lanes so cars can roam; landmark ruins, trees, barrels, and car spawns.
+  // Place a city-pack GLB (models/city/<name>.glb).
+  async placeCity(name, opts) {
+    const m = await this.assets.loadModel(`models/city/${name}.glb`)
+    if (!m) return null
+    return this.world.placeModel(m.scene, opts)
+  }
+
+  // ROYALE: a big CHUNKED city grid (free city pack + road pack). Manhattan
+  // layout — roads on a lattice, tall buildings filling the blocks — generated
+  // per cell so it is infinite-ready. The storm shrinks toward center to force
+  // players together.
   async buildRoyale() {
     const HALF = this.world.arenaRadius
-    const rng = mulberry32(56789)
-    const TAU = Math.PI * 2
+
+    // Measure the road tile to size the grid cell.
+    const inter = await this.assets.loadModel('models/city/intersectionRoad.glb')
+    let CELL = 28
+    if (inter) { const b = new THREE.Box3().setFromObject(inter.scene); const s = new THREE.Vector3(); b.getSize(s); CELL = Math.max(s.x, s.z) }
+    this._cell = CELL
+
+    const reach = Math.ceil(HALF / CELL) + 1
     const jobs = []
+    const TAU = Math.PI * 2
+    const mod3 = (n) => ((n % 3) + 3) % 3
 
-    // A handful of landmark building clusters (POIs), spaced far apart.
-    const pois = [
-      { x: -HALF * 0.5, z: -HALF * 0.5 }, { x: HALF * 0.55, z: -HALF * 0.45 },
-      { x: -HALF * 0.55, z: HALF * 0.5 }, { x: HALF * 0.5, z: HALF * 0.55 },
-      { x: 0, z: -HALF * 0.6 }, { x: 0, z: HALF * 0.6 }, { x: -HALF * 0.62, z: 0 }, { x: HALF * 0.62, z: 0 },
-    ]
-    const bld = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
-    const cover = ['Container_Long', 'Container_Small', 'SackTrench', 'Crate', 'Barrier_Large', 'TrashContainer', 'CardboardBoxes_1']
-    pois.forEach((p, i) => {
-      jobs.push(this.place(bld[i % 4], { x: p.x, z: p.z, rotY: rng() * TAU, solid: true, radiusMul: 0.7 }))
-      const n = 4 + Math.floor(rng() * 4)
-      for (let k = 0; k < n; k++) {
-        const a = rng() * TAU, r = 5 + rng() * 9
-        jobs.push(this.place(cover[Math.floor(rng() * cover.length)], {
-          x: p.x + Math.cos(a) * r, z: p.z + Math.sin(a) * r, rotY: rng() * TAU, solid: true,
-        }))
+    for (let gx = -reach; gx <= reach; gx++) {
+      for (let gz = -reach; gz <= reach; gz++) {
+        const x = gx * CELL, z = gz * CELL
+        if (Math.hypot(x, z) > HALF + CELL) continue
+        const rng = cellRng(gx, gz)
+        const roadCol = mod3(gx) === 0
+        const roadRow = mod3(gz) === 0
+
+        if (roadCol && roadRow) {
+          jobs.push(this.placeCity('intersectionRoad', { x, z, baseY: -0.55, solid: false }))
+          // street furniture on intersection corners
+          if (rng() < 0.5) jobs.push(this.placeCity('trafficLight', { x: x + CELL * 0.32, z: z + CELL * 0.32, rotY: rng() * TAU }))
+          this.world.carSpawns.push({ x, z })
+        } else if (roadRow) {
+          jobs.push(this.placeCity('straightRoad', { x, z, rotY: Math.PI / 2, baseY: -0.55, solid: false }))
+          if (rng() < 0.25) this.world.carSpawns.push({ x, z })
+        } else if (roadCol) {
+          jobs.push(this.placeCity('straightRoad', { x, z, rotY: 0, baseY: -0.55, solid: false }))
+          if (rng() < 0.25) this.world.carSpawns.push({ x, z })
+        } else {
+          // Building block: keep the very center clear as the spawn plaza.
+          if (Math.hypot(x, z) < CELL * 0.9) continue
+          this._cityBlock(x, z, CELL, rng, jobs)
+        }
       }
-      // Climbable crate stack at each POI.
-      jobs.push(this.place('Crate', { x: p.x + 3, z: p.z + 3, solid: true }))
-      jobs.push(this.place('Crate', { x: p.x + 3, z: p.z + 3, baseY: 2.0, solid: true }))
-      // Car spawn near each POI (kept in the open).
-      this.world.carSpawns.push({ x: p.x + (rng() - 0.5) * 16, z: p.z + (rng() - 0.5) * 16 })
-    })
-
-    // A couple of central car spawns + jump pads.
-    this.world.carSpawns.push({ x: 12, z: 0 }, { x: -12, z: 8 })
-    this.world.addJumpPad(20, 20, 16)
-    this.world.addJumpPad(-20, -20, 16)
-
-    // Light tree scatter (kept sparse so driving stays open).
-    const trees = ['Tree_1', 'Tree_2', 'Tree_3', 'Tree_4']
-    for (let i = 0; i < 40; i++) {
-      const a = rng() * TAU, r = HALF * (0.2 + rng() * 0.75)
-      jobs.push(this.place(trees[i % 4], { x: Math.cos(a) * r, z: Math.sin(a) * r, rotY: rng() * TAU, solid: true, radiusMul: 0.3 }))
-    }
-
-    // Glowing exploding barrels scattered.
-    for (let i = 0; i < 16; i++) {
-      let x = (rng() - 0.5) * HALF * 1.7, z = (rng() - 0.5) * HALF * 1.7
-      const d = Math.hypot(x, z); if (d < 12) { x = x / d * 12; z = z / d * 12 }
-      jobs.push(this.place(rng() < 0.5 ? 'ExplodingBarrel' : 'ExplodingBarrel_Spilled', { x, z, solid: true, radiusMul: 0.9, barrel: true }))
-    }
-
-    // Sparse decoration.
-    const deco = ['Debris_Tires', 'Debris_Pile', 'Sign', 'StreetLight', 'Pipes', 'WoodPlanks', 'Debris_BrokenCar']
-    for (let i = 0; i < 40; i++) {
-      jobs.push(this.place(deco[i % deco.length], { x: (rng() - 0.5) * HALF * 1.9, z: (rng() - 0.5) * HALF * 1.9, rotY: rng() * TAU }))
     }
 
     await Promise.all(jobs)
+  }
+
+  // Fill one block cell with tall buildings + a little greenery/props.
+  _cityBlock(cx, cz, CELL, rng, jobs) {
+    const TAU = Math.PI * 2
+    const off = CELL * 0.24
+    const corners = [[-off, -off], [off, -off], [-off, off], [off, off]]
+    for (const [ox, oz] of corners) {
+      if (rng() < 0.22) { // a few gaps -> alleys/yards to move through
+        if (rng() < 0.5) jobs.push(this.placeCity(rng() < 0.5 ? 'tree6' : 'tree2', { x: cx + ox, z: cz + oz, rotY: rng() * TAU, scale: 1 + rng(), solid: true, radiusMul: 0.4 }))
+        continue
+      }
+      const scale = 0.9 + rng() * 1.6 // buildings ~14m..40m tall (>> player)
+      jobs.push(this.placeCity('building3', {
+        x: cx + ox, z: cz + oz, rotY: Math.floor(rng() * 4) * (Math.PI / 2),
+        scale, solid: true, radiusMul: 0.62, climbable: false,
+      }))
+    }
+    // Occasional roadside prop.
+    if (rng() < 0.5) {
+      const props = ['streetLight', 'stopSign', 'fireHydrant', 'garbageBin', 'trafficCone', 'bench2']
+      jobs.push(this.placeCity(props[Math.floor(rng() * props.length)], { x: cx + (rng() - 0.5) * CELL * 0.6, z: cz + (rng() - 0.5) * CELL * 0.6, rotY: rng() * TAU }))
+    }
   }
 
   // Tile a scaled brick-wall perimeter around the square arena (decorative).
@@ -377,4 +395,10 @@ function mulberry32(a) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+// Deterministic RNG seeded by a chunk/cell coordinate — same cell always
+// generates the same layout (the basis for chunked/infinite worlds).
+function cellRng(gx, gz) {
+  return mulberry32(((gx * 73856093) ^ (gz * 19349663)) >>> 0)
 }
