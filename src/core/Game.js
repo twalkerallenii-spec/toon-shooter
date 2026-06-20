@@ -95,7 +95,7 @@ export class Game {
 
     // Solo Battle Royale.
     document.getElementById('br-btn').addEventListener('click', () => {
-      if (this.state === STATE.MENU || this.state === STATE.DEAD) this.start(true)
+      if (this.state === STATE.MENU || this.state === STATE.DEAD) this.start('br')
     })
 
     // Map voting (online): toggle panel + cast vote.
@@ -166,8 +166,8 @@ export class Game {
   }
 
   _buildWorld() {
-    const big = !!this.brMode // Battle Royale gets a big chunked city with backdrop
-    this.world = new World({ radius: big ? 150 : 75, backdrop: big })
+    const big = !!this.brMode || !!this.hnsMode // BR + Hide&Seek use the big arena
+    this.world = new World({ radius: big ? 220 : 75, backdrop: big })
     this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
     this.camera.updateProjectionMatrix()
     this.camera.position.set(0, 1.6, 0)
@@ -181,16 +181,17 @@ export class Game {
       team: ['TEAM DM', 'Red vs Blue team battle. (online)'],
       br: ['BATTLE ROYALE', 'Drop into the city. Last one standing as the storm closes.'],
       ctf: ['CAPTURE THE FLAG', 'Steal the enemy flag, defend yours. (online)'],
+      hns: ['HIDE & SEEK', "You're the Seeker — hunt down every hider before time runs out."],
     }
     const [label, sub] = info[mode] || info.coop
     this.hud.setLobbyMode(label, sub)
   }
 
-  // START MATCH routes by selected mode: solo for co-op/BR, online for PvP.
+  // START MATCH routes by selected mode: solo for co-op/BR/Hide&Seek, online PvP.
   _startSelectedMode() {
-    const mode = document.querySelector('.lobby-tabs .mode-btn.active')?.dataset.mode || 'coop'
-    if (mode === 'br') this.start(true)
-    else if (mode === 'coop') this.start(false)
+    const mode = document.querySelector('.event-tile.active')?.dataset.mode
+      || document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
+    if (mode === 'br' || mode === 'coop' || mode === 'hns') this.start(mode)
     else this.startOnline()
   }
 
@@ -271,6 +272,8 @@ export class Game {
     this.pickups = new Pickups({ world: this.world, assets: this.assets, audio: this.audio })
     this.grenades = []
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
+    this.hnsTime = this.hnsMode ? 110 : 0 // Hide & Seek round timer (seconds)
+    this._hnsOver = false
     this.cars = []
     this.bots = []
     this.kills = 0
@@ -364,12 +367,13 @@ export class Game {
     this.hud.setLoading('DEPLOYING VEHICLES…', 82)
     await this._spawnCars()
 
-    // Fill solo Battle Royale with CPU players (free-for-all).
-    if (this.brMode && !this.net) await this._spawnBots(12)
+    // CPU players: Battle Royale = fighters (FFA); Hide & Seek = hiders.
+    if (this.brMode && !this.net) await this._spawnBots(12, 'fighter')
+    else if (this.hnsMode && !this.net) await this._spawnBots(8, 'hider')
     this.hud.setLoading('FINALIZING…', 96)
   }
 
-  async _spawnBots(count) {
+  async _spawnBots(count, role = 'fighter') {
     const NAMES = ['Ace', 'Blaze', 'Cyborg', 'Drift', 'Echo', 'Fang', 'Ghost', 'Havoc', 'Iris', 'Jolt', 'Kilo', 'Lynx', 'Nova', 'Onyx', 'Pyro', 'Rook']
     const HALF = this.world.arenaRadius
     const ready = []
@@ -377,7 +381,7 @@ export class Game {
       const a = (i / count) * Math.PI * 2 + 0.3
       const r = HALF * (0.35 + Math.random() * 0.5)
       const pos = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)
-      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos })
+      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos, role })
       bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
       if (bot.ready) ready.push(bot.ready)
       this.bots.push(bot)
@@ -396,8 +400,8 @@ export class Game {
     this._carLoads = []
     const spots = this.world.carSpawns
     if (!spots || !spots.length) return
-    // Mix of the upload's .dae cars and the city pack's redCar.glb.
-    const paths = ['models/cars/Models/Car 1.dae', 'models/city/redCar.glb', 'models/cars/Models/Car 2.dae']
+    // Cars from the uploaded pack (.dae). City car dropped per request.
+    const paths = ['models/cars/Models/Car 1.dae', 'models/cars/Models/Car 2.dae']
     const MAX = Math.min(spots.length, 14) // cap cars for performance
     for (let i = 0; i < MAX; i++) {
       const s = spots[Math.floor((i / MAX) * spots.length)]
@@ -472,10 +476,12 @@ export class Game {
     })
   }
 
-  async start(br = false) {
+  async start(mode = 'coop') {
     this.audio.resume()
-    this.onlineMode = null // solo = co-op waves
-    this.brMode = !!br      // solo battle royale = storm survival + enemies
+    this.onlineMode = null // solo
+    this.soloMode = mode
+    this.brMode = mode === 'br'
+    this.hnsMode = mode === 'hns' // Hide & Seek: you're the seeker vs bot hiders
     this._disconnect() // solo play: drop any prior connection
     this.hud.showVoteToggle(false)
     this.state = STATE.LOADING
@@ -503,6 +509,7 @@ export class Game {
     const url = (document.getElementById('mp-server').value || 'wss://toon-shooter-server.onrender.com').trim()
     this.onlineMode = document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
     this.brMode = this.onlineMode === 'br'
+    this.hnsMode = false // Hide & Seek is solo-only for now
     // Separate room per event so modes never mix (CTF players only meet CTF, etc.).
     const room = `${this.onlineMode}:${roomName}`
     status.textContent = 'Connecting…'
@@ -850,18 +857,29 @@ export class Game {
     // Idle cars still settle (friction); the driven one is updated in _driveUpdate.
     for (const car of this.cars) if (car !== this.driving) car.update(dt)
 
-    // CPU bots (free-for-all): fight each other and the player.
+    // CPU bots: BR fighters target each other + you; Hide&Seek hiders flee you.
     if (this.bots.length) {
       const live = this.bots.filter((b) => b.alive)
       const combatants = [this.player, ...live]
+      const ctx = { combatants, camera: this.camera, seeker: this.player }
       for (let i = this.bots.length - 1; i >= 0; i--) {
-        if (this.bots[i].update(dt, { combatants, camera: this.camera })) this.bots.splice(i, 1)
+        if (this.bots[i].update(dt, ctx)) this.bots.splice(i, 1)
       }
-      // Solo BR: when every bot is eliminated and you're alive, you win.
+      // Solo BR: last one standing wins.
       if (this.brMode && !this.net && !this._wonBR && this.player.alive && live.length === 0 && this.bots.length === 0) {
         this._wonBR = true
         this._winMatch('#1 VICTORY ROYALE', `Last one standing. Eliminations: ${this.kills || 0}.`)
       }
+    }
+
+    // Hide & Seek: hunt all hiders before the timer expires.
+    if (this.hnsMode && !this._hnsOver) {
+      const hiders = this.bots.filter((b) => b.alive).length
+      this.hnsTime = Math.max(0, this.hnsTime - dt)
+      const m = Math.floor(this.hnsTime / 60), s = String(Math.floor(this.hnsTime % 60)).padStart(2, '0')
+      this.hud.setStormTimer(`🔍 HIDERS LEFT: ${hiders}   ⏱ ${m}:${s}`)
+      if (hiders === 0) { this._hnsOver = true; this._winMatch('HIDERS FOUND!', `You hunted them all with ${Math.ceil(this.hnsTime)}s to spare.`) }
+      else if (this.hnsTime <= 0) { this._hnsOver = true; this._winMatch('TIME UP', `${hiders} hider(s) escaped.`, false) }
     }
 
     // Car prompt.
@@ -907,7 +925,7 @@ export class Game {
     this.weapons.update(dt)
     // Enemies: on in solo (incl. solo BR storm) and online co-op; off in PvP modes.
     const pvpMode = this.onlineMode === 'dm' || this.onlineMode === 'team' || this.onlineMode === 'br' || this.onlineMode === 'ctf'
-    if (!pvpMode) this.spawner.update(dt, this.player, this.camera)
+    if (!pvpMode && !this.hnsMode) this.spawner.update(dt, this.player, this.camera) // no waves in Hide & Seek
     if (this.ctfMode) this._updateCtf(dt)
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))

@@ -263,25 +263,49 @@ body.touch #rank-btn { display: block; }
   position: fixed; inset: 0; z-index: 10;
   background: linear-gradient(90deg, rgba(8,10,22,0.94) 0%, rgba(8,10,22,0.72) 36%, rgba(8,10,22,0.08) 64%, transparent 100%);
 }
-.lobby-tabs {
-  position: absolute; top: 0; left: 0; right: 0;
-  display: flex; gap: 2px; padding: 12px 16px; flex-wrap: wrap;
-  background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent);
+/* Top header bar */
+.lobby-header {
+  position: absolute; top: 0; left: 0; right: 0; height: 56px;
+  display: flex; align-items: center; gap: 24px; padding: 0 22px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.75), transparent);
 }
-.lobby-tabs .mode-btn {
-  background: transparent; border: none; border-bottom: 3px solid transparent; border-radius: 0;
-  color: rgba(255,255,255,0.6); padding: 8px 14px; font-weight: 800; letter-spacing: 1px; font-size: 14px;
+.lobby-header .logo { font-size: 22px; margin: 0; }
+.top-tabs { display: flex; gap: 22px; flex: 1; }
+.top-tab { font-weight: 800; letter-spacing: 1px; font-size: 14px; color: rgba(255,255,255,0.5); cursor: pointer; padding: 4px 0; border-bottom: 3px solid transparent; }
+.top-tab.active { color: #fff; border-bottom-color: var(--accent); }
+.player-chip {
+  font-weight: 800; color: #fff; background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 14px;
 }
-.lobby-tabs .mode-btn:hover { color: #fff; }
-.lobby-tabs .mode-btn.active { color: #fff; border-bottom-color: var(--accent); background: transparent; }
+.player-chip .vbuck { color: #5ad1ff; }
 
 .lobby-card {
-  position: absolute; left: 4%; top: 50%; transform: translateY(-50%);
-  width: 350px; max-width: 88vw;
+  position: absolute; left: 4%; top: 46%; transform: translateY(-50%);
+  width: 340px; max-width: 88vw;
   background: rgba(10,14,30,0.82); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 16px; padding: 22px; backdrop-filter: blur(6px);
-  max-height: 86vh; overflow-y: auto;
+  border-radius: 16px; padding: 20px; backdrop-filter: blur(6px);
+  max-height: 70vh; overflow-y: auto;
 }
+.mm-label { font-size: 12px; letter-spacing: 3px; color: var(--accent); font-weight: 800; margin-bottom: 8px; }
+
+/* Bottom playlist tiles */
+#event-bar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; gap: 10px; padding: 14px 18px; overflow-x: auto;
+  background: linear-gradient(0deg, rgba(0,0,0,0.8), transparent);
+}
+.event-tile {
+  flex: 0 0 auto; width: 130px; height: 84px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(0,0,0,0.35));
+  border: 2px solid rgba(255,255,255,0.14); border-radius: 12px; cursor: pointer;
+  color: #fff; font: inherit; transition: transform .1s, border-color .1s;
+}
+.event-tile:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.4); }
+.event-tile.active { border-color: var(--ev); box-shadow: 0 0 0 1px var(--ev), 0 8px 18px rgba(0,0,0,0.4); }
+.event-tile .ev-ico { font-size: 26px; }
+.event-tile .ev-name { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; }
+.event-tile.active .ev-name { color: var(--ev); }
 .logo {
   font-size: 30px; font-weight: 900; letter-spacing: 3px; color: var(--accent);
   text-shadow: 0 3px 0 rgba(0,0,0,0.4); margin-bottom: 14px;

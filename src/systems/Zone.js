@@ -12,7 +12,7 @@ export class Zone {
     this.radius = this.maxR
     this.targetR = this.maxR
     this.minR = 6
-    this.shrinkRate = 3
+    this.shrinkRate = Math.max(4, this.maxR / 26) // close faster on bigger maps
     this.damage = 7 // damage per second outside
     this.phaseTimer = 8 // grace before first shrink
     this.shrinking = false

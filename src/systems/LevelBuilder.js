@@ -37,40 +37,62 @@ export class LevelBuilder {
     return this.world.placeModel(m.scene, opts)
   }
 
-  // ROYALE: load the single Fortnite city GLB as the whole map, scaled to fill
-  // the arena, fully solid via mesh collision (CityCollider). Storm shrinks to
-  // center to force players together.
+  // ROYALE: a VERY BIG open arena built in CHUNKS from the toon kit. Each grid
+  // cell is generated deterministically (cellRng) so it's infinite-ready; most
+  // cells stay open (room to drive) with occasional cover clusters, buildings,
+  // and tree groves. The storm shrinks toward center to force players together.
   async buildRoyale() {
     const HALF = this.world.arenaRadius
-    const m = await this.assets.loadModel('models/fortnite-city-opt.glb')
-    if (!m) return
-    const city = m.scene
+    const CELL = 32
+    const reach = Math.ceil(HALF / CELL) + 1
+    const jobs = []
+    const TAU = Math.PI * 2
 
-    // Scale to fill the play area, drop to the ground, center on origin.
-    let box = new THREE.Box3().setFromObject(city)
-    const size = new THREE.Vector3(); box.getSize(size)
-    const horiz = Math.max(size.x, size.z) || 1
-    city.scale.setScalar((HALF * 2 * 0.92) / horiz)
-    box = new THREE.Box3().setFromObject(city)
-    const center = new THREE.Vector3(); box.getCenter(center)
-    city.position.x -= center.x
-    city.position.z -= center.z
-    city.position.y -= box.min.y
-    city.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = true } })
-    this.world.scene.add(city)
-    this.world.scene.updateMatrixWorld(true)
+    const cover = ['Crate', 'SackTrench', 'Barrier_Large', 'Container_Small', 'CardboardBoxes_1',
+      'CardboardBoxes_3', 'TrashContainer', 'Barrier_Fixed', 'SackTrench_Small', 'Pallet']
+    const buildings = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
+    const trees = ['Tree_1', 'Tree_2', 'Tree_3', 'Tree_4']
 
-    // Everything solid: mesh collider for player/cars + the city as a bullet
-    // raycast target (radius 0 so the circle push-out skips it).
-    const { CityCollider } = await import('./CityCollider.js')
-    this.world.cityCollider = new CityCollider(city)
-    this.world.obstacles.push({ mesh: city, radius: 0, x: 0, z: 0 })
+    for (let gx = -reach; gx <= reach; gx++) {
+      for (let gz = -reach; gz <= reach; gz++) {
+        const cxw = gx * CELL, czw = gz * CELL
+        if (Math.hypot(cxw, czw) > HALF + CELL) continue
+        const rng = cellRng(gx, gz)
+        // Keep the central spawn plaza clear.
+        const central = Math.hypot(cxw, czw) < CELL * 1.2
+        const jitter = () => (rng() - 0.5) * CELL * 0.6
+        const roll = rng()
 
-    // A few car spawns near the center (ground height is resolved at runtime).
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2
-      this.world.carSpawns.push({ x: Math.cos(a) * HALF * 0.35, z: Math.sin(a) * HALF * 0.35 })
+        if (central) {
+          // open spawn + a couple of cars
+          if (rng() < 0.6) this.world.carSpawns.push({ x: cxw + jitter(), z: czw + jitter() })
+          continue
+        }
+        if (roll < 0.08) {
+          // Building (big cover / landmark).
+          jobs.push(this.place(buildings[Math.floor(rng() * 4)], { x: cxw + jitter(), z: czw + jitter(), rotY: Math.floor(rng() * 4) * (Math.PI / 2), solid: true, radiusMul: 0.7 }))
+        } else if (roll < 0.30) {
+          // Cover cluster (1-3 props).
+          const n = 1 + Math.floor(rng() * 3)
+          for (let k = 0; k < n; k++) {
+            jobs.push(this.place(cover[Math.floor(rng() * cover.length)], { x: cxw + jitter(), z: czw + jitter(), rotY: rng() * TAU, solid: true }))
+          }
+        } else if (roll < 0.42) {
+          // Tree grove.
+          const n = 1 + Math.floor(rng() * 3)
+          for (let k = 0; k < n; k++) {
+            jobs.push(this.place(trees[Math.floor(rng() * 4)], { x: cxw + jitter(), z: czw + jitter(), rotY: rng() * TAU, solid: true, radiusMul: 0.35 }))
+          }
+        } else if (roll < 0.50) {
+          // Exploding barrel.
+          jobs.push(this.place(rng() < 0.5 ? 'ExplodingBarrel' : 'ExplodingBarrel_Spilled', { x: cxw + jitter(), z: czw + jitter(), solid: true, radiusMul: 0.9, barrel: true }))
+        }
+        // Car spawns out in the open.
+        if (roll >= 0.5 && rng() < 0.12) this.world.carSpawns.push({ x: cxw + jitter(), z: czw + jitter() })
+      }
     }
+
+    await Promise.all(jobs)
   }
 
   // Tile a scaled brick-wall perimeter around the square arena (decorative).

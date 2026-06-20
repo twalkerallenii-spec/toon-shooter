@@ -11,11 +11,12 @@ const RAY = new THREE.Raycaster()
 // or the human), and shoots when it has line of sight. Free-for-all by default;
 // respects teams when given one. Shootable by the player (Enemy-like interface).
 export class Bot {
-  constructor({ world, assets, fx, name, team = null, position }) {
+  constructor({ world, assets, fx, name, team = null, position, role = 'fighter' }) {
     this.world = world
     this.fx = fx
     this.name = name
     this.team = team
+    this.role = role // 'fighter' (FFA) or 'hider' (flees the seeker, never shoots)
     this.maxHp = 100
     this.hp = 100
     this.alive = true
@@ -86,6 +87,38 @@ export class Bot {
   update(dt, ctx) {
     if (this.dying) { this.animator?.update(dt); this.removeTimer -= dt; if (this.removeTimer <= 0) { this.dispose(); return true } return false }
     if (!this.alive) return true
+
+    // HIDER role: flee from the seeker, never shoot.
+    if (this.role === 'hider') {
+      const p2 = this.group.position
+      const seeker = ctx.seeker
+      let moving = false
+      const d = seeker ? Math.hypot(seeker.position.x - p2.x, seeker.position.z - p2.z) : 999
+      if (seeker && d < 38) {
+        TMP.set(p2.x - seeker.position.x, 0, p2.z - seeker.position.z).normalize()
+        this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
+        p2.addScaledVector(TMP, this.speed * 1.15 * dt); moving = true
+      } else {
+        this._wanderCd -= dt
+        if (this._wanderCd <= 0 || this._wander.distanceToSquared(p2) < 9) {
+          const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 28
+          this._wander.set(p2.x + Math.cos(a) * r, 0, p2.z + Math.sin(a) * r)
+          this._wanderCd = 2 + Math.random() * 3
+        }
+        TMP.subVectors(this._wander, p2); TMP.y = 0
+        if (TMP.lengthSq() > 1) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z); p2.addScaledVector(TMP, this.speed * 0.5 * dt); moving = true }
+      }
+      this._wall -= dt
+      if (this.world.cityCollider) {
+        if (this._wall <= 0) { this.world.cityCollider.pushOut(p2, 0.6, 1.0); this._wall = 0.15 }
+        const gy = this.world.cityCollider.groundY(p2.x, p2.z, p2.y + 3)
+        p2.y = gy != null && gy >= 0 ? gy : 0
+      }
+      this.world.clampToArena(p2)
+      if (this.animator) { this.animator.play(moving ? 'Run' : 'Idle', { fade: 0.2 }); this.animator.update(dt) }
+      if (ctx.camera) this.tag.quaternion.copy(ctx.camera.quaternion)
+      return false
+    }
 
     // Acquire nearest valid target.
     let target = null, bestD = this.viewRange

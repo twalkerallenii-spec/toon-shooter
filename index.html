@@ -80,21 +80,24 @@
 
     <!-- Start / pause / game-over overlay -->
     <div id="overlay">
-      <!-- Top mode tabs (Fortnite-style) -->
-      <div class="lobby-tabs">
-        <button class="mode-btn active" data-mode="coop">CO-OP</button>
-        <button class="mode-btn" data-mode="dm">DEATHMATCH</button>
-        <button class="mode-btn" data-mode="team">TEAM DM</button>
-        <button class="mode-btn" data-mode="br">BATTLE ROYALE</button>
-        <button class="mode-btn" data-mode="ctf">CAPTURE FLAG</button>
+      <!-- Top bar -->
+      <div class="lobby-header">
+        <div class="logo">TOON&nbsp;SHOOTER</div>
+        <div class="top-tabs">
+          <span class="top-tab active">PLAY</span>
+          <span class="top-tab">LOCKER</span>
+          <span class="top-tab">STORE</span>
+          <span class="top-tab">CAREER</span>
+        </div>
+        <div class="player-chip"><span class="vbuck">◆</span> 1,250</div>
       </div>
 
       <!-- Left matchmaking card -->
       <div class="lobby-card">
-        <div class="logo">TOON&nbsp;SHOOTER</div>
+        <div class="mm-label">MATCHMAKING</div>
         <div class="mm">
           <div class="mm-mode" id="card-mode">CO-OP</div>
-          <div class="mm-sub" id="overlay-msg">Drop in and fight.</div>
+          <div class="mm-sub" id="overlay-msg">Survive endless waves.</div>
         </div>
         <button id="start-btn" class="big-btn">START MATCH</button>
         <button id="br-btn" class="alt-btn">☢ SOLO BATTLE ROYALE</button>
@@ -127,19 +130,29 @@
             </label>
           </div>
           <ul class="controls">
-            <li><b>WASD</b> move</li>
-            <li><b>Mouse</b> aim</li>
-            <li><b>L-Click</b> shoot</li>
-            <li><b>R-Click</b> ADS</li>
-            <li><b>Shift</b> sprint</li>
-            <li><b>Space</b> jump</li>
-            <li><b>1-6/Scroll</b> weapons</li>
-            <li><b>G</b> grenade</li>
-            <li><b>E</b> car</li>
-            <li><b>R</b> reload</li>
-            <li><b>Esc</b> pause</li>
+            <li><b>WASD</b> move</li><li><b>Mouse</b> aim</li>
+            <li><b>L-Click</b> shoot</li><li><b>R-Click</b> ADS</li>
+            <li><b>Shift</b> sprint</li><li><b>Space</b> jump</li>
+            <li><b>1-6/Scroll</b> weapons</li><li><b>G</b> grenade</li>
+            <li><b>E</b> car</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
           </ul>
         </details>
+      </div>
+
+      <!-- Bottom playlist tiles (the "apps" = events) -->
+      <div id="event-bar">
+        <button class="event-tile mode-btn active" data-mode="coop" style="--ev:#4ade80">
+          <span class="ev-ico">🌊</span><span class="ev-name">Co-op Waves</span></button>
+        <button class="event-tile mode-btn" data-mode="br" style="--ev:#a05cff">
+          <span class="ev-ico">☢️</span><span class="ev-name">Battle Royale</span></button>
+        <button class="event-tile mode-btn" data-mode="hns" style="--ev:#ff9f1c">
+          <span class="ev-ico">🔍</span><span class="ev-name">Hide &amp; Seek</span></button>
+        <button class="event-tile mode-btn" data-mode="dm" style="--ev:#ff5a5a">
+          <span class="ev-ico">💀</span><span class="ev-name">Deathmatch</span></button>
+        <button class="event-tile mode-btn" data-mode="team" style="--ev:#3da9fc">
+          <span class="ev-ico">🚩</span><span class="ev-name">Team DM</span></button>
+        <button class="event-tile mode-btn" data-mode="ctf" style="--ev:#ffd24a">
+          <span class="ev-ico">🏴</span><span class="ev-name">Capture Flag</span></button>
       </div>
     </div>
 
