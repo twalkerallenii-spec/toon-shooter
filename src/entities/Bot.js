@@ -51,7 +51,7 @@ export class Bot {
 
     world.scene.add(this.group)
 
-    assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
+    this.ready = assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
       if (!m || this.dying) return
       m.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = true } })
       normalizeModel(m.scene, 1.8)

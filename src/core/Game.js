@@ -140,6 +140,12 @@ export class Game {
       if (!this.input.isTouch && !locked && this.state === STATE.PLAYING) this.pause()
     }
 
+    // Pointer lock can't be requested right after an async load (no user
+    // gesture), so clicking the game re-acquires it.
+    this.canvas.addEventListener('click', () => {
+      if (this.state === STATE.PLAYING && !this.input.isTouch && !this.input.locked) this.input.requestLock()
+    })
+
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR' && this.state === STATE.PLAYING) this.weapons.startReload()
       if (e.code === 'Tab') { e.preventDefault(); if (this.state === STATE.PLAYING) this.hud.showScoreboard(this._scoreboardRows()) }
@@ -340,32 +346,43 @@ export class Game {
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
 
+    // Preload the character models so bots/enemies appear instantly (not after
+    // "world loaded"). These are cached for every later clone.
+    this.hud.setLoading('LOADING CHARACTERS…', 40)
+    await Promise.all([
+      this.assets.loadModel('models/characters/Character_Soldier.gltf'),
+      this.assets.loadModel('models/characters/Character_Enemy.gltf'),
+    ])
+
     // Build the map (Battle Royale loads the big city).
-    this.hud.setLoading(this.brMode ? 'BUILDING THE CITY…' : 'BUILDING WORLD…', 55)
+    this.hud.setLoading(this.brMode ? 'BUILDING THE CITY…' : 'BUILDING WORLD…', 60)
     const { LevelBuilder } = await import('../systems/LevelBuilder.js')
     const mapKey = this.brMode ? 'royale' : this.selectedMap
     await new LevelBuilder({ world: this.world, assets: this.assets }).build(mapKey)
 
-    // Spawn drivable cars at the level's open car-spawn points.
-    this.hud.setLoading('DEPLOYING VEHICLES…', 80)
+    // Spawn drivable cars (await their models so none pop in after load).
+    this.hud.setLoading('DEPLOYING VEHICLES…', 82)
     await this._spawnCars()
 
-    // Fill solo Battle Royale with CPU players (free-for-all: they fight each
-    // other and you).
-    if (this.brMode && !this.net) this._spawnBots(12)
+    // Fill solo Battle Royale with CPU players (free-for-all).
+    if (this.brMode && !this.net) await this._spawnBots(12)
+    this.hud.setLoading('FINALIZING…', 96)
   }
 
-  _spawnBots(count) {
+  async _spawnBots(count) {
     const NAMES = ['Ace', 'Blaze', 'Cyborg', 'Drift', 'Echo', 'Fang', 'Ghost', 'Havoc', 'Iris', 'Jolt', 'Kilo', 'Lynx', 'Nova', 'Onyx', 'Pyro', 'Rook']
     const HALF = this.world.arenaRadius
+    const ready = []
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + 0.3
       const r = HALF * (0.35 + Math.random() * 0.5)
       const pos = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)
       const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos })
       bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
+      if (bot.ready) ready.push(bot.ready)
       this.bots.push(bot)
     }
+    await Promise.all(ready) // wait for bot models before the match starts
   }
 
   _onBotDeath(bot, attacker) {
@@ -376,6 +393,7 @@ export class Game {
   }
 
   async _spawnCars() {
+    this._carLoads = []
     const spots = this.world.carSpawns
     if (!spots || !spots.length) return
     // Mix of the upload's .dae cars and the city pack's redCar.glb.
@@ -389,8 +407,9 @@ export class Game {
       const loaded = path.endsWith('.glb')
         ? this.assets.loadModel(path).then((m) => m && m.scene)
         : this.assets.loadCollada(path)
-      loaded.then((scene) => { if (scene) car.setModel(scene) })
+      this._carLoads.push(loaded.then((scene) => { if (scene) car.setModel(scene) }))
     }
+    await Promise.all(this._carLoads) // models ready before the match starts
   }
 
   // Enter the nearest car, or exit the one being driven (toggled by E).
@@ -758,6 +777,7 @@ export class Game {
     if (this.state !== STATE.PLAYING) return
     requestAnimationFrame(() => this._loop())
 
+    try {
     const dt = Math.min(0.05, this.clock.getDelta())
 
     // Enter / exit a car with E (edge-triggered).
@@ -908,6 +928,10 @@ export class Game {
     }
 
     this._drawMinimap()
+    } catch (e) {
+      if (!this._loopErr) { console.error('[loop]', e); this._loopErr = true }
+    }
+    // Always render so the game never freezes on a stale frame.
     this.renderer.render(this.world.scene, this.camera)
   }
 
