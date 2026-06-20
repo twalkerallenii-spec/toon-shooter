@@ -80,60 +80,75 @@
 
     <!-- Start / pause / game-over overlay -->
     <div id="overlay">
-      <div class="panel">
-        <h1>TOON&nbsp;SHOOTER</h1>
-        <p id="overlay-msg">Survive the waves. Click to lock your mouse and shoot.</p>
-        <div class="maps">
-          <div class="maps-label">MAP</div>
-          <div class="map-options">
-            <button class="map-btn active" data-map="arena">Arena</button>
-            <button class="map-btn" data-map="outpost">Outpost</button>
-            <button class="map-btn" data-map="rooftops">Rooftops</button>
-          </div>
+      <!-- Top mode tabs (Fortnite-style) -->
+      <div class="lobby-tabs">
+        <button class="mode-btn active" data-mode="coop">CO-OP</button>
+        <button class="mode-btn" data-mode="dm">DEATHMATCH</button>
+        <button class="mode-btn" data-mode="team">TEAM DM</button>
+        <button class="mode-btn" data-mode="br">BATTLE ROYALE</button>
+        <button class="mode-btn" data-mode="ctf">CAPTURE FLAG</button>
+      </div>
+
+      <!-- Left matchmaking card -->
+      <div class="lobby-card">
+        <div class="logo">TOON&nbsp;SHOOTER</div>
+        <div class="mm">
+          <div class="mm-mode" id="card-mode">CO-OP</div>
+          <div class="mm-sub" id="overlay-msg">Drop in and fight.</div>
         </div>
+        <button id="start-btn" class="big-btn">START MATCH</button>
+        <button id="br-btn" class="alt-btn">☢ SOLO BATTLE ROYALE</button>
 
-        <div class="settings">
-          <label class="set-row">Sensitivity
-            <input id="set-sens" type="range" min="0.2" max="3" step="0.1" value="1" />
-          </label>
-          <label class="set-row set-check">
-            <input id="set-invert" type="checkbox" /> Invert look (Y)
-          </label>
-        </div>
-
-        <button id="start-btn">PLAY</button>
-        <button id="br-btn">☢ BATTLE ROYALE (solo)</button>
-
-        <div class="mp">
-          <div class="mp-row">
-            <input id="mp-name" placeholder="Your name" maxlength="16" />
-            <input id="mp-room" placeholder="Room" value="lobby" maxlength="24" />
+        <details class="lobby-extra">
+          <summary>ONLINE &amp; SETTINGS</summary>
+          <div class="mp">
+            <div class="mp-row">
+              <input id="mp-name" placeholder="Your name" maxlength="16" />
+              <input id="mp-room" placeholder="Room" value="lobby" maxlength="24" />
+            </div>
+            <input id="mp-server" placeholder="wss://your-app.onrender.com" />
+            <button id="online-btn">PLAY ONLINE</button>
+            <div id="mp-status"></div>
           </div>
-          <input id="mp-server" placeholder="wss://your-app.onrender.com" />
-          <div class="mode-options">
-            <button class="mode-btn active" data-mode="coop">Co-op</button>
-            <button class="mode-btn" data-mode="dm">Deathmatch</button>
-            <button class="mode-btn" data-mode="team">Team DM</button>
-            <button class="mode-btn" data-mode="br">Battle Royale</button>
-            <button class="mode-btn" data-mode="ctf">Capture the Flag</button>
+          <div class="maps">
+            <div class="maps-label">MAP (co-op / team modes)</div>
+            <div class="map-options">
+              <button class="map-btn active" data-map="arena">Arena</button>
+              <button class="map-btn" data-map="outpost">Outpost</button>
+              <button class="map-btn" data-map="rooftops">Rooftops</button>
+            </div>
           </div>
-          <button id="online-btn">PLAY ONLINE</button>
-          <div id="mp-status"></div>
-        </div>
+          <div class="settings">
+            <label class="set-row">Sensitivity
+              <input id="set-sens" type="range" min="0.2" max="3" step="0.1" value="1" />
+            </label>
+            <label class="set-row set-check">
+              <input id="set-invert" type="checkbox" /> Invert look (Y)
+            </label>
+          </div>
+          <ul class="controls">
+            <li><b>WASD</b> move</li>
+            <li><b>Mouse</b> aim</li>
+            <li><b>L-Click</b> shoot</li>
+            <li><b>R-Click</b> ADS</li>
+            <li><b>Shift</b> sprint</li>
+            <li><b>Space</b> jump</li>
+            <li><b>1-6/Scroll</b> weapons</li>
+            <li><b>G</b> grenade</li>
+            <li><b>E</b> car</li>
+            <li><b>R</b> reload</li>
+            <li><b>Esc</b> pause</li>
+          </ul>
+        </details>
+      </div>
+    </div>
 
-        <ul class="controls">
-          <li><b>WASD</b> move</li>
-          <li><b>Mouse</b> aim</li>
-          <li><b>Left Click</b> shoot</li>
-          <li><b>Right Click</b> aim (ADS)</li>
-          <li><b>Shift</b> sprint</li>
-          <li><b>Space</b> jump</li>
-          <li><b>1-6 / Scroll</b> weapons</li>
-          <li><b>G</b> grenade</li>
-          <li><b>E</b> enter/exit car</li>
-          <li><b>R</b> reload</li>
-          <li><b>Esc</b> pause</li>
-        </ul>
+    <!-- Loading screen -->
+    <div id="loading" class="hidden">
+      <div class="load-inner">
+        <div class="logo">TOON&nbsp;SHOOTER</div>
+        <div class="load-bar"><div id="load-fill"></div></div>
+        <div id="load-status">SEARCHING FOR WORLD…</div>
       </div>
     </div>
 

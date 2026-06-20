@@ -31,6 +31,10 @@ export class HUD {
       overlay: document.getElementById('overlay'),
       overlayMsg: document.getElementById('overlay-msg'),
       startBtn: document.getElementById('start-btn'),
+      cardMode: document.getElementById('card-mode'),
+      loading: document.getElementById('loading'),
+      loadFill: document.getElementById('load-fill'),
+      loadStatus: document.getElementById('load-status'),
     }
   }
 
@@ -164,6 +168,28 @@ export class HUD {
   hideOverlay() {
     this.el.overlay.classList.add('hidden')
   }
+
+  setLobbyMode(label, sub) {
+    if (this.el.cardMode) this.el.cardMode.textContent = label
+    if (sub) this.el.overlayMsg.textContent = sub
+  }
+
+  // ---- Loading screen ----
+  showLoading() {
+    this.el.loading.classList.remove('hidden', 'ready')
+    this.el.loadFill.style.width = '0%'
+    this.el.loadStatus.textContent = 'SEARCHING FOR WORLD…'
+  }
+  setLoading(text, pct) {
+    if (text) this.el.loadStatus.textContent = text
+    if (pct != null) this.el.loadFill.style.width = `${pct}%`
+  }
+  loadingReady() {
+    this.el.loading.classList.add('ready')
+    this.el.loadFill.style.width = '100%'
+    this.el.loadStatus.textContent = 'WORLD FOUND AND LOADED'
+  }
+  hideLoading() { this.el.loading.classList.add('hidden') }
 }
 
 function escapeHtml(s) {

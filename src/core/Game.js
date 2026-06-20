@@ -19,7 +19,9 @@ import { Net } from '../net/Net.js'
 import { RemotePlayer } from '../entities/RemotePlayer.js'
 
 // Game states
-const STATE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', DEAD: 'dead' }
+const STATE = { MENU: 'menu', LOADING: 'loading', PLAYING: 'playing', PAUSED: 'paused', DEAD: 'dead' }
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export class Game {
   constructor(canvas) {
@@ -66,14 +68,14 @@ export class Game {
     this._onResize = () => this._resize()
     window.addEventListener('resize', this._onResize)
 
-    // Render the menu background once.
-    this._buildWorld()
-    this._renderOnce()
+    // Animated lobby scene behind the menu.
+    this._buildLobby()
+    this._lobbyLoop()
   }
 
   _wireUI() {
     this.hud.el.startBtn.addEventListener('click', () => {
-      if (this.state === STATE.MENU || this.state === STATE.DEAD) this.start()
+      if (this.state === STATE.MENU || this.state === STATE.DEAD) this._startSelectedMode()
       else if (this.state === STATE.PAUSED) this.resume()
     })
 
@@ -110,12 +112,14 @@ export class Game {
       })
     })
 
-    // Mode selector buttons (co-op / deathmatch).
+    // Mode tabs — update the matchmaking card.
     document.querySelectorAll('.mode-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === btn))
+        this._updateLobbyCard(btn.dataset.mode)
       })
     })
+    this._updateLobbyCard('coop')
 
     // Settings (sensitivity + invert-Y), persisted to localStorage.
     const sens = document.getElementById('set-sens')
@@ -151,13 +155,8 @@ export class Game {
       else this.hud.hideScoreboard()
     })
 
-    // Victory screen -> back to menu.
-    document.getElementById('victory-btn').addEventListener('click', () => {
-      this.hud.hideVictory()
-      this.state = STATE.MENU
-      this.hud.hide()
-      this.hud.showOverlay('Survive the waves, or take the win. Click to lock your mouse and shoot.', 'PLAY')
-    })
+    // Victory screen -> back to the lobby.
+    document.getElementById('victory-btn').addEventListener('click', () => this._toLobby())
   }
 
   _buildWorld() {
@@ -166,6 +165,89 @@ export class Game {
     this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
     this.camera.updateProjectionMatrix()
     this.camera.position.set(0, 1.6, 0)
+  }
+
+  // Update the matchmaking card label/sub for the selected mode.
+  _updateLobbyCard(mode) {
+    const info = {
+      coop: ['CO-OP', 'Survive endless waves of enemies.'],
+      dm: ['DEATHMATCH', 'Free-for-all — most kills wins. (online)'],
+      team: ['TEAM DM', 'Red vs Blue team battle. (online)'],
+      br: ['BATTLE ROYALE', 'Drop into the city. Last one standing as the storm closes.'],
+      ctf: ['CAPTURE THE FLAG', 'Steal the enemy flag, defend yours. (online)'],
+    }
+    const [label, sub] = info[mode] || info.coop
+    this.hud.setLobbyMode(label, sub)
+  }
+
+  // START MATCH routes by selected mode: solo for co-op/BR, online for PvP.
+  _startSelectedMode() {
+    const mode = document.querySelector('.lobby-tabs .mode-btn.active')?.dataset.mode || 'coop'
+    if (mode === 'br') this.start(true)
+    else if (mode === 'coop') this.start(false)
+    else this.startOnline()
+  }
+
+  // ---- Animated Fortnite-style lobby (rotating character on a podium) ----
+  _buildLobby() {
+    this.lobbyScene = new THREE.Scene()
+    this.lobbyScene.background = new THREE.Color(0x0e1530)
+    this.lobbyScene.fog = new THREE.Fog(0x0e1530, 12, 32)
+    this.lobbyScene.add(new THREE.HemisphereLight(0xcfe0ff, 0x202840, 1.1))
+    const key = new THREE.DirectionalLight(0xfff0d0, 2.2); key.position.set(4, 7, 6); this.lobbyScene.add(key)
+    const rim = new THREE.DirectionalLight(0x66aaff, 1.4); rim.position.set(-6, 3, -5); this.lobbyScene.add(rim)
+
+    const podCenter = 2.4
+    const ped = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.5, 1.8, 0.4, 36),
+      new THREE.MeshStandardMaterial({ color: 0x222a44, emissive: 0x163a8a, emissiveIntensity: 0.7, roughness: 0.4 })
+    )
+    ped.position.set(podCenter, 0.0, 0); this.lobbyScene.add(ped)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.05, 8, 48), new THREE.MeshBasicMaterial({ color: 0xffcb3d }))
+    ring.rotation.x = Math.PI / 2; ring.position.set(podCenter, 0.25, 0); this.lobbyScene.add(ring)
+
+    this.lobbyCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100)
+    this.lobbyCam.position.set(-0.2, 2.3, 7); this.lobbyCam.lookAt(podCenter, 1.5, 0)
+    this._lobbyClock = new THREE.Clock()
+
+    this.assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
+      if (!m) return
+      m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
+      const box = new THREE.Box3().setFromObject(m.scene); const s = new THREE.Vector3(); box.getSize(s)
+      m.scene.scale.setScalar(2.5 / (s.y || 1))
+      const b2 = new THREE.Box3().setFromObject(m.scene); const c = new THREE.Vector3(); b2.getCenter(c)
+      m.scene.position.set(podCenter - c.x, 0.2 - b2.min.y, -c.z)
+      this.lobbyScene.add(m.scene); this.lobbyModel = m.scene
+      if (m.animations?.length) {
+        this.lobbyMixer = new THREE.AnimationMixer(m.scene)
+        const clip = m.animations.find((a) => /idle/i.test(a.name)) || m.animations[0]
+        this.lobbyMixer.clipAction(clip).play()
+      }
+    })
+  }
+
+  _lobbyLoop() {
+    if (this.state !== STATE.MENU) { this._lobbyRAF = null; return }
+    this._lobbyRAF = requestAnimationFrame(() => this._lobbyLoop())
+    const dt = this._lobbyClock.getDelta()
+    if (this.lobbyModel) this.lobbyModel.rotation.y += dt * 0.5
+    this.lobbyMixer?.update(dt)
+    this.renderer.render(this.lobbyScene, this.lobbyCam)
+  }
+
+  _stopLobby() {
+    if (this._lobbyRAF) { cancelAnimationFrame(this._lobbyRAF); this._lobbyRAF = null }
+  }
+
+  // Return to the lobby menu (from victory/game-over).
+  _toLobby() {
+    this.state = STATE.MENU
+    this.hud.hide()
+    this.hud.hideVictory()
+    this.hud.el.overlay.classList.remove('hidden')
+    this.hud.el.startBtn.textContent = 'START MATCH'
+    this._lobbyClock.getDelta() // reset dt
+    this._lobbyLoop()
   }
 
   _resetGameObjects() {
@@ -243,12 +325,13 @@ export class Game {
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
     this.hud.setReloading(false)
 
-    // Try to load real toon models if present (non-blocking).
-    this._loadOptionalModels()
+    // Kick off asset loading; start() / onWelcome await this with a loading screen.
+    this._ready = this._loadOptionalModels()
   }
 
   async _loadOptionalModels() {
     // Preload every weapon model so switching is instant, then mount the current.
+    this.hud.setLoading('LOADING WEAPONS…', 20)
     await Promise.all(this.weapons.defs.map((d) =>
       this.assets.loadModel(`models/guns/${d.model}.gltf`)))
     this._setWeaponViewmodel(this.weapons.def)
@@ -257,12 +340,14 @@ export class Game {
     // Enemies are spawned over time, so the spawner clones this per enemy.
     this.spawner.enemyModelPath = 'models/characters/Character_Enemy.gltf'
 
-    // Build the map: Battle Royale uses the big open "royale" island.
+    // Build the map (Battle Royale loads the big city).
+    this.hud.setLoading(this.brMode ? 'BUILDING THE CITY…' : 'BUILDING WORLD…', 55)
     const { LevelBuilder } = await import('../systems/LevelBuilder.js')
     const mapKey = this.brMode ? 'royale' : this.selectedMap
     await new LevelBuilder({ world: this.world, assets: this.assets }).build(mapKey)
 
     // Spawn drivable cars at the level's open car-spawn points.
+    this.hud.setLoading('DEPLOYING VEHICLES…', 80)
     await this._spawnCars()
 
     // Fill solo Battle Royale with CPU players (free-for-all: they fight each
@@ -368,15 +453,22 @@ export class Game {
     })
   }
 
-  start(br = false) {
+  async start(br = false) {
     this.audio.resume()
     this.onlineMode = null // solo = co-op waves
     this.brMode = !!br      // solo battle royale = storm survival + enemies
     this._disconnect() // solo play: drop any prior connection
     this.hud.showVoteToggle(false)
-    this._resetGameObjects()
-    this.state = STATE.PLAYING
+    this.state = STATE.LOADING
+    this._stopLobby()
     this.hud.hideOverlay()
+    this.hud.showLoading()
+    this._resetGameObjects() // sets this._ready
+    await this._ready        // wait for world + assets, with the loading screen up
+    this.hud.loadingReady()  // "WORLD FOUND AND LOADED"
+    await wait(750)
+    this.hud.hideLoading()
+    this.state = STATE.PLAYING
     this.hud.show()
     if (!this.input.isTouch) this.input.requestLock()
     this.clock.getDelta() // reset dt
@@ -397,12 +489,17 @@ export class Game {
     status.textContent = 'Connecting…'
 
     this._disconnect()
+    this.state = STATE.LOADING
+    this._stopLobby()
+    this.hud.hideOverlay()
+    this.hud.showLoading()
+    this.hud.setLoading('CONNECTING TO SERVER…', 30)
     this._resetGameObjects()
 
     this.net = new Net({
       url, name, room, mode: this.onlineMode,
       handlers: {
-        onWelcome: (id, peers, team) => {
+        onWelcome: async (id, peers, team) => {
           status.textContent = ''
           this.myTeam = team
           this.peerNames.set(id, this._selfName)
@@ -415,6 +512,11 @@ export class Game {
             this._addRemote(peer.id, peer.name, peer.p, peer.team)
             this.board.set(peer.id, { name: peer.name, kills: 0, deaths: 0, team: peer.team })
           }
+          this.hud.setLoading('LOADING WORLD…', 70)
+          await this._ready
+          this.hud.loadingReady()
+          await wait(600)
+          this.hud.hideLoading()
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
           this.hud.show()
@@ -918,6 +1020,7 @@ export class Game {
   _resize() {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
+    if (this.lobbyCam) { this.lobbyCam.aspect = this.camera.aspect; this.lobbyCam.updateProjectionMatrix() }
     this.renderer.setSize(window.innerWidth, window.innerHeight)
   }
 }

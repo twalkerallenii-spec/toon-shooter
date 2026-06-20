@@ -258,39 +258,66 @@ body.touch #rank-btn { display: block; }
   padding: 12px 40px; cursor: pointer; box-shadow: 0 6px 0 #b8901f;
 }
 
-/* ---------- Overlay ---------- */
+/* ---------- Fortnite-style lobby / Overlay ---------- */
 #overlay {
-  position: fixed; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 50% 30%, #1b2550, #070a16);
-  z-index: 10;
+  position: fixed; inset: 0; z-index: 10;
+  background: linear-gradient(90deg, rgba(8,10,22,0.94) 0%, rgba(8,10,22,0.72) 36%, rgba(8,10,22,0.08) 64%, transparent 100%);
 }
-.panel {
-  text-align: center;
-  padding: 40px 56px;
-  background: rgba(10, 14, 30, 0.7);
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  backdrop-filter: blur(4px);
-  max-width: 480px;
+.lobby-tabs {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; gap: 2px; padding: 12px 16px; flex-wrap: wrap;
+  background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent);
 }
-.panel h1 {
-  font-size: 52px; letter-spacing: 4px; margin-bottom: 14px;
-  color: var(--accent);
-  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+.lobby-tabs .mode-btn {
+  background: transparent; border: none; border-bottom: 3px solid transparent; border-radius: 0;
+  color: rgba(255,255,255,0.6); padding: 8px 14px; font-weight: 800; letter-spacing: 1px; font-size: 14px;
 }
-.panel p { opacity: 0.85; margin-bottom: 22px; line-height: 1.5; }
+.lobby-tabs .mode-btn:hover { color: #fff; }
+.lobby-tabs .mode-btn.active { color: #fff; border-bottom-color: var(--accent); background: transparent; }
 
-#start-btn {
-  font: inherit; font-size: 22px; font-weight: 800; letter-spacing: 3px;
-  color: #1a1300; background: var(--accent);
-  border: none; border-radius: 12px;
-  padding: 14px 48px; cursor: pointer;
-  box-shadow: 0 6px 0 #b8901f;
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
+.lobby-card {
+  position: absolute; left: 4%; top: 50%; transform: translateY(-50%);
+  width: 350px; max-width: 88vw;
+  background: rgba(10,14,30,0.82); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 16px; padding: 22px; backdrop-filter: blur(6px);
+  max-height: 86vh; overflow-y: auto;
 }
-#start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #b8901f; }
-#start-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #b8901f; }
+.logo {
+  font-size: 30px; font-weight: 900; letter-spacing: 3px; color: var(--accent);
+  text-shadow: 0 3px 0 rgba(0,0,0,0.4); margin-bottom: 14px;
+}
+.mm { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.mm-mode { font-size: 20px; font-weight: 800; letter-spacing: 1px; color: #fff; }
+.mm-sub { font-size: 13px; opacity: 0.72; margin-top: 3px; }
+
+.big-btn {
+  display: block; width: 100%; font: inherit; font-size: 22px; font-weight: 900; letter-spacing: 2px;
+  color: #10210a; background: linear-gradient(180deg,#86ff63,#34c23a);
+  border: none; border-radius: 12px; padding: 15px; cursor: pointer;
+  box-shadow: 0 6px 0 #1f8f2b; transition: transform .08s, box-shadow .08s;
+}
+.big-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #1f8f2b; }
+.big-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #1f8f2b; }
+.alt-btn {
+  display:block; width:100%; margin-top:10px; font:inherit; font-size:14px; font-weight:800; letter-spacing:1px;
+  color:#fff; background: rgba(120,40,200,0.45); border:1px solid #a05cff; border-radius:10px; padding:11px; cursor:pointer;
+}
+.alt-btn:hover { background: rgba(120,40,200,0.7); }
+.lobby-extra { margin-top: 14px; }
+.lobby-extra summary { cursor: pointer; font-size: 12px; letter-spacing: 2px; opacity: 0.7; padding: 6px 0; }
+
+/* ---------- Loading screen ---------- */
+#loading {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 38%, #16203f, #05060d);
+}
+.load-inner { text-align: center; width: min(460px, 82vw); }
+.load-bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,0.12); overflow: hidden; margin: 24px 0 14px; }
+#load-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#ffcb3d,#ff7a3d); transition: width .35s ease; }
+#load-status { font-size: 15px; letter-spacing: 3px; font-weight: 800; color: #fff; }
+#loading.ready #load-status { color: #86ff63; }
+#loading.ready #load-fill { background: #86ff63; }
 
 /* Settings */
 .settings {
