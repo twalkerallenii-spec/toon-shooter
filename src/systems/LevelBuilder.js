@@ -52,6 +52,8 @@ export class LevelBuilder {
       'CardboardBoxes_3', 'TrashContainer', 'Barrier_Fixed', 'SackTrench_Small', 'Pallet']
     const buildings = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
     const trees = ['Tree_1', 'Tree_2', 'Tree_3', 'Tree_4']
+    const deco = ['Debris_Tires', 'Debris_Pile', 'Debris_Papers_1', 'Debris_Papers_2', 'TrafficCone',
+      'WoodPlanks', 'Pipes', 'Sign', 'StreetLight', 'Pallet_Broken', 'GasCan', 'Sofa_Small']
 
     for (let gx = -reach; gx <= reach; gx++) {
       for (let gz = -reach; gz <= reach; gz++) {
@@ -63,32 +65,30 @@ export class LevelBuilder {
         const jitter = () => (rng() - 0.5) * CELL * 0.6
         const roll = rng()
 
-        if (central) {
-          // open spawn + a couple of cars
-          if (rng() < 0.6) this.world.carSpawns.push({ x: cxw + jitter(), z: czw + jitter() })
-          continue
-        }
-        if (roll < 0.08) {
-          // Building (big cover / landmark).
+        if (central) continue // open spawn plaza
+        // Dense fill: nearly every cell gets something, with lanes still readable.
+        if (roll < 0.14) {
+          // Building (big cover / landmark) + a little cover around it.
           jobs.push(this.place(buildings[Math.floor(rng() * 4)], { x: cxw + jitter(), z: czw + jitter(), rotY: Math.floor(rng() * 4) * (Math.PI / 2), solid: true, radiusMul: 0.7 }))
-        } else if (roll < 0.30) {
-          // Cover cluster (1-3 props).
-          const n = 1 + Math.floor(rng() * 3)
+          const n = 1 + Math.floor(rng() * 2)
+          for (let k = 0; k < n; k++) jobs.push(this.place(cover[Math.floor(rng() * cover.length)], { x: cxw + jitter(), z: czw + jitter(), rotY: rng() * TAU, solid: true }))
+        } else if (roll < 0.55) {
+          // Cover cluster (2-4 props).
+          const n = 2 + Math.floor(rng() * 3)
           for (let k = 0; k < n; k++) {
             jobs.push(this.place(cover[Math.floor(rng() * cover.length)], { x: cxw + jitter(), z: czw + jitter(), rotY: rng() * TAU, solid: true }))
           }
-        } else if (roll < 0.42) {
+        } else if (roll < 0.74) {
           // Tree grove.
-          const n = 1 + Math.floor(rng() * 3)
+          const n = 2 + Math.floor(rng() * 3)
           for (let k = 0; k < n; k++) {
             jobs.push(this.place(trees[Math.floor(rng() * 4)], { x: cxw + jitter(), z: czw + jitter(), rotY: rng() * TAU, solid: true, radiusMul: 0.35 }))
           }
-        } else if (roll < 0.50) {
-          // Exploding barrel.
+        } else if (roll < 0.86) {
           jobs.push(this.place(rng() < 0.5 ? 'ExplodingBarrel' : 'ExplodingBarrel_Spilled', { x: cxw + jitter(), z: czw + jitter(), solid: true, radiusMul: 0.9, barrel: true }))
         }
-        // Car spawns out in the open.
-        if (roll >= 0.5 && rng() < 0.12) this.world.carSpawns.push({ x: cxw + jitter(), z: czw + jitter() })
+        // Ground clutter (non-solid) in most cells so nothing looks bare.
+        if (rng() < 0.7) jobs.push(this.place(deco[Math.floor(rng() * deco.length)], { x: cxw + jitter(), z: czw + jitter(), rotY: rng() * TAU }))
       }
     }
 

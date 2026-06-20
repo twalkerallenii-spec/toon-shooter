@@ -84,16 +84,15 @@
       <div class="lobby-header">
         <div class="logo">TOON&nbsp;SHOOTER</div>
         <div class="top-tabs">
-          <span class="top-tab active">PLAY</span>
-          <span class="top-tab">LOCKER</span>
-          <span class="top-tab">STORE</span>
-          <span class="top-tab">CAREER</span>
+          <span class="top-tab active" data-panel="play">PLAY</span>
+          <span class="top-tab" data-panel="locker">LOCKER</span>
+          <span class="top-tab" data-panel="store">STORE</span>
         </div>
         <div class="player-chip"><span class="vbuck">◆</span> 1,250</div>
       </div>
 
-      <!-- Left matchmaking card -->
-      <div class="lobby-card">
+      <!-- Left matchmaking card (PLAY panel) -->
+      <div class="lobby-card panel-play">
         <div class="mm-label">MATCHMAKING</div>
         <div class="mm">
           <div class="mm-mode" id="card-mode">CO-OP</div>
@@ -134,9 +133,34 @@
             <li><b>L-Click</b> shoot</li><li><b>R-Click</b> ADS</li>
             <li><b>Shift</b> sprint</li><li><b>Space</b> jump</li>
             <li><b>1-6/Scroll</b> weapons</li><li><b>G</b> grenade</li>
-            <li><b>E</b> car</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
+            <li><b>E</b> car</li><li><b>F</b> grapple</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
           </ul>
         </details>
+      </div>
+
+      <!-- LOCKER panel: choose your character -->
+      <div class="lobby-card panel-locker hidden">
+        <div class="mm-label">LOCKER — CHARACTER</div>
+        <div class="char-grid" id="char-grid">
+          <button class="char-card active" data-char="Character_Soldier"><span class="cc-ico">🪖</span>Soldier</button>
+          <button class="char-card" data-char="Character_Hazmat"><span class="cc-ico">☣️</span>Hazmat</button>
+          <button class="char-card" data-char="Character_Enemy"><span class="cc-ico">👽</span>Enemy</button>
+        </div>
+        <p class="locker-note">Your pick shows on the podium and on your character.</p>
+      </div>
+
+      <!-- STORE panel -->
+      <div class="lobby-card panel-store hidden">
+        <div class="mm-label">ITEM SHOP</div>
+        <div class="char-grid">
+          <button class="char-card owned"><span class="cc-ico">🪖</span>Soldier<small>OWNED</small></button>
+          <button class="char-card owned"><span class="cc-ico">☣️</span>Hazmat<small>OWNED</small></button>
+          <button class="char-card owned"><span class="cc-ico">👽</span>Enemy<small>OWNED</small></button>
+          <button class="char-card locked"><span class="cc-ico">🥷</span>Ninja<small>SOON</small></button>
+          <button class="char-card locked"><span class="cc-ico">🤖</span>Robot<small>SOON</small></button>
+          <button class="char-card locked"><span class="cc-ico">🎃</span>Pumpkin<small>SOON</small></button>
+        </div>
+        <p class="locker-note">More skins coming. Everything's free — grab them in the Locker.</p>
       </div>
 
       <!-- Bottom playlist tiles (the "apps" = events) -->
@@ -153,6 +177,16 @@
           <span class="ev-ico">🚩</span><span class="ev-name">Team DM</span></button>
         <button class="event-tile mode-btn" data-mode="ctf" style="--ev:#ffd24a">
           <span class="ev-ico">🏴</span><span class="ev-name">Capture Flag</span></button>
+        <button class="event-tile mode-btn" data-mode="ffa" style="--ev:#ff7a3d">
+          <span class="ev-ico">⚔️</span><span class="ev-name">FFA</span></button>
+        <button class="event-tile mode-btn" data-mode="gungame" style="--ev:#5ad1ff">
+          <span class="ev-ico">🔫</span><span class="ev-name">Gun Game</span></button>
+        <button class="event-tile mode-btn" data-mode="oitc" style="--ev:#ff5ad1">
+          <span class="ev-ico">🎯</span><span class="ev-name">One Shot</span></button>
+        <button class="event-tile mode-btn" data-mode="jugg" style="--ev:#9b9b9b">
+          <span class="ev-ico">🛡️</span><span class="ev-name">Juggernaut</span></button>
+        <button class="event-tile mode-btn" data-mode="infect" style="--ev:#7CFF5A">
+          <span class="ev-ico">🧟</span><span class="ev-name">Infection</span></button>
       </div>
     </div>
 

@@ -11,14 +11,15 @@ const RAY = new THREE.Raycaster()
 // or the human), and shoots when it has line of sight. Free-for-all by default;
 // respects teams when given one. Shootable by the player (Enemy-like interface).
 export class Bot {
-  constructor({ world, assets, fx, name, team = null, position, role = 'fighter' }) {
+  constructor({ world, assets, fx, name, team = null, position, role = 'fighter', hp = 100, scale = 1, char = 'models/characters/Character_Soldier.gltf' }) {
     this.world = world
     this.fx = fx
     this.name = name
     this.team = team
-    this.role = role // 'fighter' (FFA) or 'hider' (flees the seeker, never shoots)
-    this.maxHp = 100
-    this.hp = 100
+    this.role = role // 'fighter' | 'hider' | 'zombie' (melee chaser)
+    this.maxHp = hp
+    this.hp = hp
+    this._scale = scale
     this.alive = true
     this.kills = 0
     this.dying = false
@@ -36,6 +37,7 @@ export class Bot {
 
     this.group = new THREE.Group()
     this.group.position.copy(position)
+    if (scale !== 1) this.group.scale.setScalar(scale) // e.g. juggernaut
 
     // Invisible capsule the player's bullets test against.
     this.hitMesh = new THREE.Mesh(
@@ -52,7 +54,7 @@ export class Bot {
 
     world.scene.add(this.group)
 
-    this.ready = assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
+    this.ready = assets.loadModel(char).then((m) => {
       if (!m || this.dying) return
       m.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = true } })
       normalizeModel(m.scene, 1.8)
@@ -116,6 +118,29 @@ export class Bot {
       }
       this.world.clampToArena(p2)
       if (this.animator) { this.animator.play(moving ? 'Run' : 'Idle', { fade: 0.2 }); this.animator.update(dt) }
+      if (ctx.camera) this.tag.quaternion.copy(ctx.camera.quaternion)
+      return false
+    }
+
+    // ZOMBIE role: chase the nearest combatant and melee on contact, no guns.
+    if (this.role === 'zombie') {
+      const p3 = this.group.position
+      let tgt = null, bd = 200
+      for (const c of ctx.combatants) {
+        if (c === this || !c.alive) continue
+        const d = Math.hypot(c.position.x - p3.x, c.position.z - p3.z)
+        if (d < bd) { bd = d; tgt = c }
+      }
+      let moving = false
+      if (tgt) {
+        TMP.subVectors(tgt.position, p3); TMP.y = 0; const dist = TMP.length(); TMP.normalize()
+        this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
+        if (dist > 1.9) { p3.addScaledVector(TMP, this.speed * 1.35 * dt); moving = true }
+        else { this.shootCd -= dt; if (this.shootCd <= 0) { this.shootCd = 0.9; tgt.applyDamage?.(11, this); this.animator?.playOnceThen?.('Punch', 'Idle') } }
+      }
+      if (this.world.cityCollider) { const gy = this.world.cityCollider.groundY(p3.x, p3.z, p3.y + 3); p3.y = gy != null && gy >= 0 ? gy : 0 }
+      this.world.clampToArena(p3)
+      if (this.animator) { if (moving) this.animator.play('Run', { fade: 0.2 }); this.animator.update(dt) }
       if (ctx.camera) this.tag.quaternion.copy(ctx.camera.quaternion)
       return false
     }

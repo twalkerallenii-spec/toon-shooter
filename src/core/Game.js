@@ -23,6 +23,15 @@ const STATE = { MENU: 'menu', LOADING: 'loading', PLAYING: 'playing', PAUSED: 'p
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Solo combat modes (vs bots) on the normal arena. Each is a small rule tweak.
+const SOLO_MODES = {
+  ffa: { label: 'FFA DEATHMATCH', bots: 7, role: 'fighter', killTarget: 15 },
+  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, startWeapon: 0 },
+  oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0 },
+  jugg: { label: 'JUGGERNAUT', jugg: true },
+  infect: { label: 'INFECTION', bots: 10, role: 'zombie', survive: 90 },
+}
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas
@@ -33,6 +42,7 @@ export class Game {
     // Persisted settings.
     this.settings = { sens: 1, invertY: false }
     try { Object.assign(this.settings, JSON.parse(localStorage.getItem('ts_settings') || '{}')) } catch {}
+    this.character = localStorage.getItem('ts_char') || 'Character_Soldier' // Locker pick
 
     // Minimap canvas.
     this.minimap = document.getElementById('minimap')
@@ -121,6 +131,29 @@ export class Game {
     })
     this._updateLobbyCard('coop')
 
+    // Top tabs switch PLAY / LOCKER / STORE panels.
+    document.querySelectorAll('.top-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const p = tab.dataset.panel
+        document.querySelectorAll('.top-tab').forEach((t) => t.classList.toggle('active', t === tab))
+        document.querySelector('.panel-play').classList.toggle('hidden', p !== 'play')
+        document.querySelector('.panel-locker').classList.toggle('hidden', p !== 'locker')
+        document.querySelector('.panel-store').classList.toggle('hidden', p !== 'store')
+        document.getElementById('event-bar').style.display = p === 'play' ? '' : 'none'
+      })
+    })
+
+    // Locker — pick your character.
+    document.querySelectorAll('#char-grid .char-card').forEach((card) => {
+      card.classList.toggle('active', card.dataset.char === this.character)
+      card.addEventListener('click', () => {
+        this.character = card.dataset.char
+        localStorage.setItem('ts_char', this.character)
+        document.querySelectorAll('#char-grid .char-card').forEach((c) => c.classList.toggle('active', c === card))
+        this._setLobbyCharacter(this.character)
+      })
+    })
+
     // Settings (sensitivity + invert-Y), persisted to localStorage.
     const sens = document.getElementById('set-sens')
     const invert = document.getElementById('set-invert')
@@ -166,8 +199,10 @@ export class Game {
   }
 
   _buildWorld() {
-    const big = !!this.brMode || !!this.hnsMode // BR + Hide&Seek use the big arena
-    this.world = new World({ radius: big ? 220 : 75, backdrop: big })
+    // BR is a huge arena; Hide & Seek is a smaller, denser map; rest standard.
+    const radius = this.brMode ? 190 : this.hnsMode ? 95 : 75
+    const backdrop = !!this.brMode || !!this.hnsMode
+    this.world = new World({ radius, backdrop })
     this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
     this.camera.updateProjectionMatrix()
     this.camera.position.set(0, 1.6, 0)
@@ -179,19 +214,25 @@ export class Game {
       coop: ['CO-OP', 'Survive endless waves of enemies.'],
       dm: ['DEATHMATCH', 'Free-for-all — most kills wins. (online)'],
       team: ['TEAM DM', 'Red vs Blue team battle. (online)'],
-      br: ['BATTLE ROYALE', 'Drop into the city. Last one standing as the storm closes.'],
+      br: ['BATTLE ROYALE', 'Drop into the big arena. Last one standing as the storm closes.'],
       ctf: ['CAPTURE THE FLAG', 'Steal the enemy flag, defend yours. (online)'],
-      hns: ['HIDE & SEEK', "You're the Seeker — hunt down every hider before time runs out."],
+      hns: ['HIDE & SEEK', "You're the Seeker — hunt every hider before time runs out."],
+      ffa: ['FFA DEATHMATCH', 'Free-for-all vs bots — first to 15 kills wins.'],
+      gungame: ['GUN GAME', 'Every kill upgrades your weapon. Master all to win.'],
+      oitc: ['ONE IN THE CHAMBER', 'Everyone has 1 HP. One shot, one kill.'],
+      jugg: ['JUGGERNAUT', 'Take down the giant juggernaut bot.'],
+      infect: ['INFECTION', 'Survive the zombie horde until the timer runs out.'],
     }
     const [label, sub] = info[mode] || info.coop
     this.hud.setLobbyMode(label, sub)
   }
 
-  // START MATCH routes by selected mode: solo for co-op/BR/Hide&Seek, online PvP.
+  // START MATCH routes by selected mode: solo for single-player modes, online PvP.
   _startSelectedMode() {
     const mode = document.querySelector('.event-tile.active')?.dataset.mode
       || document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
-    if (mode === 'br' || mode === 'coop' || mode === 'hns') this.start(mode)
+    const solo = mode === 'br' || mode === 'coop' || mode === 'hns' || SOLO_MODES[mode]
+    if (solo) this.start(mode)
     else this.startOnline()
   }
 
@@ -216,9 +257,17 @@ export class Game {
     this.lobbyCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100)
     this.lobbyCam.position.set(-0.2, 2.3, 7); this.lobbyCam.lookAt(podCenter, 1.5, 0)
     this._lobbyClock = new THREE.Clock()
+    this._podCenter = podCenter
+    this._setLobbyCharacter(this.character)
+  }
 
-    this.assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
-      if (!m) return
+  // Swap the podium character (used by the Locker).
+  _setLobbyCharacter(name) {
+    if (!this.lobbyScene) return
+    if (this.lobbyModel) { this.lobbyScene.remove(this.lobbyModel); this.lobbyMixer = null }
+    const podCenter = this._podCenter
+    this.assets.loadModel(`models/characters/${name}.gltf`).then((m) => {
+      if (!m || this.character !== name) return
       m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
       const box = new THREE.Box3().setFromObject(m.scene); const s = new THREE.Vector3(); box.getSize(s)
       m.scene.scale.setScalar(2.5 / (s.y || 1))
@@ -274,6 +323,12 @@ export class Game {
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
     this.hnsTime = this.hnsMode ? 110 : 0 // Hide & Seek round timer (seconds)
     this._hnsOver = false
+    // Solo combat mode config (FFA / Gun Game / etc.)
+    this.modeCfg = (!this.net && SOLO_MODES[this.soloMode]) || null
+    this._matchOver = false
+    this.ggLevel = 0
+    this.jugg = null
+    this._surviveTime = this.modeCfg?.survive ?? 0
     this.cars = []
     this.bots = []
     this.kills = 0
@@ -285,6 +340,9 @@ export class Game {
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
+    // Apply combat-mode tweaks.
+    if (this.modeCfg?.lowHp) { this.player.maxHp = 1; this.player.hp = 1 }
+    if (this.modeCfg?.startWeapon != null) this.weapons.index = this.modeCfg.startWeapon
     this._prevHp = this.player.maxHp
     this._deadHandled = false
     this._lastAttacker = null
@@ -355,6 +413,7 @@ export class Game {
     await Promise.all([
       this.assets.loadModel('models/characters/Character_Soldier.gltf'),
       this.assets.loadModel('models/characters/Character_Enemy.gltf'),
+      this.assets.loadModel('models/characters/Character_Hazmat.gltf'),
     ])
 
     // Build the map (Battle Royale loads the big city).
@@ -367,10 +426,23 @@ export class Game {
     this.hud.setLoading('DEPLOYING VEHICLES…', 82)
     await this._spawnCars()
 
-    // CPU players: Battle Royale = fighters (FFA); Hide & Seek = hiders.
+    // CPU players per mode.
     if (this.brMode && !this.net) await this._spawnBots(12, 'fighter')
     else if (this.hnsMode && !this.net) await this._spawnBots(8, 'hider')
+    else if (this.modeCfg) {
+      if (this.modeCfg.jugg) await this._spawnJuggernaut()
+      else await this._spawnBots(this.modeCfg.bots || 7, this.modeCfg.role || 'fighter')
+    }
     this.hud.setLoading('FINALIZING…', 96)
+  }
+
+  async _spawnJuggernaut() {
+    const pos = new THREE.Vector3(0, 0, -this.world.arenaRadius * 0.4)
+    const jug = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: 'JUGGERNAUT', position: pos, role: 'fighter', hp: 1600, scale: 2.0 })
+    jug.damage = 16; jug.speed = 4
+    jug.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
+    this.jugg = jug; this.bots.push(jug)
+    if (jug.ready) await jug.ready
   }
 
   async _spawnBots(count, role = 'fighter') {
@@ -381,7 +453,9 @@ export class Game {
       const a = (i / count) * Math.PI * 2 + 0.3
       const r = HALF * (0.35 + Math.random() * 0.5)
       const pos = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)
-      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos, role })
+      const chars = ['Character_Soldier', 'Character_Hazmat', 'Character_Enemy']
+      const char = `models/characters/${chars[i % chars.length]}.gltf`
+      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos, role, char })
       bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
       if (bot.ready) ready.push(bot.ready)
       this.bots.push(bot)
@@ -393,7 +467,11 @@ export class Game {
     const killer = attacker ? attacker.name : (this._selfName || 'You')
     this.hud.addKillFeed(`${killer} ▸ ${bot.name}`)
     if (attacker && attacker.kills != null) attacker.kills++
-    if (!attacker) this.kills = (this.kills || 0) + 1 // player kill (no bot attacker)
+    if (!attacker) {
+      this.kills = (this.kills || 0) + 1 // player kill (no bot attacker)
+      // Gun Game: each kill promotes you to the next weapon.
+      if (this.modeCfg?.gungame) { this.ggLevel++; this.weapons.switchTo(Math.min(this.ggLevel, this.weapons.defs.length - 1)) }
+    }
   }
 
   async _spawnCars() {
@@ -414,6 +492,29 @@ export class Game {
       this._carLoads.push(loaded.then((scene) => { if (scene) car.setModel(scene) }))
     }
     await Promise.all(this._carLoads) // models ready before the match starts
+  }
+
+  // Grapple: zip to wherever you're aiming (props, ground).
+  _fireGrapple() {
+    const aim = this.player.getAimRay()
+    this._grappleRay = this._grappleRay || new THREE.Raycaster()
+    this._grappleRay.set(aim.origin, aim.dir)
+    this._grappleRay.far = 140
+    const meshes = this.world.obstacles.map((o) => o.mesh).filter(Boolean)
+    const hits = this._grappleRay.intersectObjects(meshes, true)
+    let point = null
+    if (hits.length) point = hits[0].point.clone()
+    else if (aim.dir.y < -0.02) { // fall back to the ground plane
+      const t = (this.world.groundY - aim.origin.y) / aim.dir.y
+      if (t > 1 && t < 140) point = aim.origin.clone().addScaledVector(aim.dir, t)
+    }
+    if (!point) return
+    point.y += 1.2
+    const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
+    this.weapons.beam(muzzle, point, 0x66ffcc, 0.3) // zipline line
+    this.particles.emit(point, 8, { color: [0.4, 1, 0.8], speed: 4, size: 0.5, life: 0.4 })
+    this.player.startGrapple(point)
+    this.audio?.jumpPad?.()
   }
 
   // Enter the nearest car, or exit the one being driven (toggled by E).
@@ -792,6 +893,11 @@ export class Game {
     if (eDown && !this._ePrev) this._toggleCar()
     this._ePrev = eDown
 
+    // Grapple / zipline with F.
+    const fDown = this.input.isDown('KeyF')
+    if (fDown && !this._fPrev && this.player.alive && !this.driving) this._fireGrapple()
+    this._fPrev = fDown
+
     // Weapon switching: number keys + mouse wheel.
     for (let i = 0; i < this.weapons.defs.length; i++) {
       if (this.input.isDown(`Digit${i + 1}`)) this.weapons.switchTo(i)
@@ -882,6 +988,26 @@ export class Game {
       else if (this.hnsTime <= 0) { this._hnsOver = true; this._winMatch('TIME UP', `${hiders} hider(s) escaped.`, false) }
     }
 
+    // Solo combat modes (FFA / Gun Game / OITC / Juggernaut / Infection).
+    if (this.modeCfg && !this._matchOver) {
+      const cfg = this.modeCfg
+      if (cfg.survive != null) {
+        this._surviveTime = Math.max(0, this._surviveTime - dt)
+        const left = this.bots.filter((b) => b.alive).length
+        const m = Math.floor(this._surviveTime / 60), s = String(Math.floor(this._surviveTime % 60)).padStart(2, '0')
+        this.hud.setStormTimer(`🧟 SURVIVE  ⏱ ${m}:${s}   Zombies: ${left}`)
+        if (this._surviveTime <= 0) { this._matchOver = true; this._winMatch('SURVIVED!', 'You outlasted the infection.') }
+      } else if (cfg.killTarget) {
+        this.hud.setStormTimer(`☠ KILLS ${this.kills} / ${cfg.killTarget}`)
+        if (this.kills >= cfg.killTarget) { this._matchOver = true; this._winMatch('VICTORY', `${cfg.killTarget} eliminations!`) }
+      } else if (cfg.gungame) {
+        this.hud.setStormTimer(`🔫 GUN ${Math.min(this.ggLevel + 1, this.weapons.defs.length)} / ${this.weapons.defs.length}`)
+        if (this.ggLevel >= this.weapons.defs.length) { this._matchOver = true; this._winMatch('GUN GAME WIN', 'Mastered every weapon!') }
+      } else if (cfg.jugg) {
+        if (this.jugg && !this.jugg.alive) { this._matchOver = true; this._winMatch('JUGGERNAUT DOWN', 'You took down the juggernaut!') }
+      }
+    }
+
     // Car prompt.
     if (this.cars.length) {
       if (this.driving) this.hud.setCarPrompt('Press E to exit')
@@ -924,8 +1050,9 @@ export class Game {
     this.hud.setCrosshairSpread(spread)
     this.weapons.update(dt)
     // Enemies: on in solo (incl. solo BR storm) and online co-op; off in PvP modes.
-    const pvpMode = this.onlineMode === 'dm' || this.onlineMode === 'team' || this.onlineMode === 'br' || this.onlineMode === 'ctf'
-    if (!pvpMode && !this.hnsMode) this.spawner.update(dt, this.player, this.camera) // no waves in Hide & Seek
+    // Waves only in Co-op (solo or online).
+    const coopWaves = this.net ? this.onlineMode === 'coop' : this.soloMode === 'coop'
+    if (coopWaves) this.spawner.update(dt, this.player, this.camera)
     if (this.ctfMode) this._updateCtf(dt)
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))

@@ -48,6 +48,12 @@ export class Player {
     this._spacePrev = false
     this._vaultCd = 0
 
+    // Grapple / zipline
+    this.grappling = false
+    this.grappleTarget = new THREE.Vector3()
+    this.grappleTime = 0
+    this.grappleSpeed = 60
+
     // Aim-down-sights
     this.adsActive = false
     this.adsAmount = 0          // 0 = hip, 1 = fully aimed (smoothed)
@@ -186,7 +192,33 @@ export class Player {
     this.pitch = Math.max(-1.4, Math.min(1.4, this.pitch))
   }
 
+  // Fire a grapple toward a world point — zip there fast.
+  startGrapple(point) {
+    this.grappleTarget.copy(point)
+    this.grappling = true
+    this.grappleTime = 1.4
+  }
+
+  _grappleMove(dt) {
+    TMP.subVectors(this.grappleTarget, this.position)
+    const d = TMP.length()
+    this.grappleTime -= dt
+    // Arrive, time out, or cancel with jump.
+    if (d < 2.6 || this.grappleTime <= 0 || this.input.isDown('Space')) {
+      this.grappling = false
+      this.velocity.set(0, this.input.isDown('Space') ? this.jumpSpeed * 0.7 : 0, 0)
+      return
+    }
+    TMP.normalize()
+    this.position.addScaledVector(TMP, this.grappleSpeed * dt)
+    this.velocity.set(0, 0, 0)
+    this.onGround = false
+    this.moving = true; this.sprinting = false
+    this.world.clampToArena(this.position)
+  }
+
   _handleMove(dt) {
+    if (this.grappling) { this._grappleMove(dt); return }
     FORWARD.set(Math.sin(this.yaw), 0, Math.cos(this.yaw))
     RIGHT.set(FORWARD.z, 0, -FORWARD.x)
 
