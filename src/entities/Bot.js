@@ -27,10 +27,10 @@ export class Bot {
     this.speed = 6 + Math.random() * 2
     this.shootRange = 30
     this.viewRange = 70
-    this.damage = 9
-    this.accuracy = 0.5
+    this.damage = 8
+    this.accuracy = 0.28 // CPUs miss more (less laser-accurate)
     this.shootCd = Math.random() * 1.5
-    this.shootInterval = 0.9
+    this.shootInterval = 1.15
     this._wall = 0
     this._wander = new THREE.Vector3(position.x, 0, position.z)
     this._wanderCd = 0

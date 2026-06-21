@@ -109,9 +109,9 @@ export class Game {
       this.startOnline()
     })
 
-    // Solo Battle Royale.
+    // Quick Battle Royale drop-in.
     document.getElementById('br-btn').addEventListener('click', () => {
-      if (this.state === STATE.MENU || this.state === STATE.DEAD) this.start('br')
+      if (this.state === STATE.MENU || this.state === STATE.DEAD) this.startOnline('br')
     })
 
     // Map voting (online): toggle panel + cast vote.
@@ -247,13 +247,12 @@ export class Game {
     this.hud.setLobbyMode(label, sub)
   }
 
-  // START MATCH routes by selected mode: solo for single-player modes, online PvP.
+  // Every game drops into an online match (bots fill it; friends can join the
+  // same room). Falls back to offline if the server can't be reached.
   _startSelectedMode() {
     const mode = document.querySelector('.event-tile.active')?.dataset.mode
       || document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
-    const solo = mode === 'br' || mode === 'coop' || mode === 'hns' || SOLO_MODES[mode]
-    if (solo) this.start(mode)
-    else this.startOnline()
+    this.startOnline(mode)
   }
 
   // ---- Animated Fortnite-style lobby (rotating character on a podium) ----
@@ -344,8 +343,8 @@ export class Game {
     this.zone = this.brMode ? new Zone(this.world, this.particles) : null
     this.hnsTime = this.hnsMode ? 110 : 0 // Hide & Seek round timer (seconds)
     this._hnsOver = false
-    // Solo combat mode config (FFA / Gun Game / etc.)
-    this.modeCfg = (!this.net && SOLO_MODES[this.soloMode]) || null
+    // Combat mode config (FFA / Gun Game / etc.) — applies online or offline.
+    this.modeCfg = SOLO_MODES[this.net ? this.onlineMode : this.soloMode] || null
     this._matchOver = false
     this.ggLevel = 0
     this.jugg = null
@@ -372,6 +371,11 @@ export class Game {
     this.player.onLand = (pos, dbl) => this.particles.emit({ x: pos.x, y: 0.2, z: pos.z }, dbl ? 10 : 8, { color: [0.75, 0.75, 0.7], speed: dbl ? 5 : 3, size: 0.6, life: 0.4, up: 1 })
     this._shake = 0
     this._streak = 0; this._lastKillT = -99; this._matchT = 0
+    this.pickups.onPickup = (type, wi) => {
+      const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
+        : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
+      this.hud.addKillFeed(`🟢 ${label}`)
+    }
     this.hud.clearKillFeed()
     this.hud.setStorm(false)
     this.hud.setStormTimer(null)
@@ -450,19 +454,24 @@ export class Game {
     this.hud.setLoading('DEPLOYING VEHICLES…', 82)
     await this._spawnCars()
 
-    // Battle Royale: scatter weapon loot + shield/health around the map.
-    if (this.brMode) {
-      this.pickups.scatterWeapons(this.weapons.defs, 20, this.world.arenaRadius)
-      const HALF = this.world.arenaRadius
-      for (let i = 0; i < 12; i++) {
-        const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * (HALF - 14)
-        this.pickups.spawn(Math.random() < 0.5 ? 'shield' : 'health', Math.cos(a) * r, Math.sin(a) * r)
+    // Loot: BR gets weapons + shield/health; other combat modes get supply drops.
+    const HALF = this.world.arenaRadius
+    const drop = (type, n, minR = 8) => {
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, r = minR + Math.random() * (HALF - minR - 4)
+        this.pickups.spawn(type, Math.cos(a) * r, Math.sin(a) * r)
       }
     }
+    if (this.brMode) {
+      this.pickups.scatterWeapons(this.weapons.defs, 20, HALF)
+      drop('shield', 7); drop('health', 7); drop('ammo', 6)
+    } else if (this.modeCfg || this.hnsMode) {
+      drop('health', 6); drop('shield', 5); drop('ammo', 6)
+    }
 
-    // CPU players per mode.
-    if (this.brMode && !this.net) await this._spawnBots(12, 'fighter')
-    else if (this.hnsMode && !this.net) await this._spawnBots(8, 'hider')
+    // CPU players fill the match (online or offline) for bot modes.
+    if (this.brMode) await this._spawnBots(12, 'fighter')
+    else if (this.hnsMode) await this._spawnBots(8, 'hider')
     else if (this.modeCfg) {
       if (this.modeCfg.jugg) await this._spawnJuggernaut()
       else await this._spawnBots(this.modeCfg.bots || 7, this.modeCfg.role || 'fighter')
@@ -691,18 +700,22 @@ export class Game {
     this.hud.hideLoading()
   }
 
-  // Connect to the relay server, then start once joined.
-  startOnline() {
+  // Connect to the relay server, then drop in once joined. Works for every mode
+  // (bot modes spawn CPUs to fill; PvP modes wait for humans).
+  startOnline(modeOverride) {
     this.audio.resume()
     const status = document.getElementById('mp-status')
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
     const roomName = (document.getElementById('mp-room').value || 'lobby').trim()
     const url = (document.getElementById('mp-server').value || 'wss://toon-shooter-server.onrender.com').trim()
-    this.onlineMode = document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
-    this.brMode = this.onlineMode === 'br'
-    this.hnsMode = false // Hide & Seek is solo-only for now
-    // Separate room per event so modes never mix (CTF players only meet CTF, etc.).
-    const room = `${this.onlineMode}:${roomName}`
+    const mode = modeOverride || document.querySelector('.event-tile.active')?.dataset.mode || document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
+    this.onlineMode = mode
+    this.brMode = mode === 'br'
+    this.hnsMode = mode === 'hns'
+    if (SOLO_MODES[mode]?.map) this.selectedMap = SOLO_MODES[mode].map
+    this._fellBack = false
+    // Separate room per event so modes never mix.
+    const room = `${mode}:${roomName}`
     status.textContent = 'Connecting…'
 
     this._disconnect()
@@ -769,7 +782,14 @@ export class Game {
           this.hud.setTeamScores(ctf.scores.red, ctf.scores.blue, this.ctfMode)
         },
         onWin: (msg) => this._onWin(msg),
-        onError: () => { status.textContent = 'Connection failed. Is the server running?' },
+        onError: () => {
+          // Server unreachable: fall back to an offline match so you still drop in.
+          if (this._fellBack || this.state === STATE.PLAYING) return
+          this._fellBack = true
+          status.textContent = 'Server offline — playing solo with bots.'
+          this._disconnect()
+          this.start(mode)
+        },
         onClose: () => { if (this.state === STATE.PLAYING) status.textContent = 'Disconnected.' },
       },
     })
@@ -1034,12 +1054,20 @@ export class Game {
           }
         }
         if (res.barrel) this.explode(res.barrel)
-        // Grenade launcher: fire an explosive shell along the aim.
+        // Grenade launcher: lobbed explosive shell.
         if (res.projectile === 'grenade') {
           const v = res.dir.clone().multiplyScalar(42); v.y += 2
           this.grenades.push(new Grenade({
             world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 1.4,
             onExplode: (p) => this.explodeAt(p, { radius: 8, damage: 120 }),
+          }))
+        }
+        // Rocket launcher: fast, flat, big boom.
+        if (res.projectile === 'rocket') {
+          const v = res.dir.clone().multiplyScalar(70)
+          this.grenades.push(new Grenade({
+            world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 2.4,
+            onExplode: (p) => this.explodeAt(p, { radius: 11, damage: 170 }),
           }))
         }
         // Broadcast the shot so other players see a tracer.
@@ -1070,8 +1098,8 @@ export class Game {
       for (let i = this.bots.length - 1; i >= 0; i--) {
         if (this.bots[i].update(dt, ctx)) this.bots.splice(i, 1)
       }
-      // Solo BR: last one standing wins.
-      if (this.brMode && !this.net && !this._wonBR && this.player.alive && live.length === 0 && this.bots.length === 0) {
+      // BR (no human opponents present): last one standing wins.
+      if (this.brMode && this.remotePlayers.size === 0 && !this._wonBR && this.player.alive && live.length === 0 && this.bots.length === 0) {
         this._wonBR = true
         this._winMatch('#1 VICTORY ROYALE', `Last one standing. Eliminations: ${this.kills || 0}.`)
       }
@@ -1169,8 +1197,8 @@ export class Game {
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))
       this.hud.setStormTimer(this.zone.statusText())
-      // Solo Battle Royale: survive until the storm fully closes -> Victory Royale.
-      if (!this.net && this.player.alive && !this._wonBR && this.zone.radius <= this.zone.minR + 0.3) {
+      // Battle Royale: survive until the storm fully closes -> Victory Royale.
+      if (this.remotePlayers.size === 0 && this.player.alive && !this._wonBR && this.zone.radius <= this.zone.minR + 0.3) {
         this._wonBR = true
         this._winMatch('#1 VICTORY ROYALE', `You outlasted the storm. Kills: ${this.enemyKills || 0}.`)
       }

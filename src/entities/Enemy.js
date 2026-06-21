@@ -26,7 +26,7 @@ export class Enemy {
     this.attackInterval = 1.1
     this.shootCooldown = 0.6 + Math.random() * 1.2 // desync volleys
     this.shootInterval = 1.4
-    this.shootAccuracy = 0.55 // chance a shot connects
+    this.shootAccuracy = 0.38 // chance a shot connects (less laser-accurate)
     this.targetHeight = 1.8
     this.dying = false
     this.removeTimer = 0

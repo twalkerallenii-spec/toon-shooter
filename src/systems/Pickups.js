@@ -112,6 +112,7 @@ export class Pickups {
         }
         if (took) {
           this.audio?.pickup()
+          this.onPickup?.(it.type, it.wIndex)
           this._remove(i)
         }
       }

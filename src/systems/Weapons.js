@@ -9,7 +9,11 @@ export const WEAPONS = [
   { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16, tracer: 0x9fe7ff },
   { key: 'Revolver', model: 'Revolver', label: 'Revolver', damage: 55, fireRate: 3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 220, reload: 1.3, adsFov: 52, recoil: 0.12, tracer: 0xffd24a },
   { key: 'Minigun', model: 'ShortCannon', label: 'Minigun', damage: 13, fireRate: 18, mag: 80, spread: 0.04, pellets: 1, auto: true, range: 200, reload: 3.0, adsFov: 60, recoil: 0.03, tracer: 0xff7a3d },
+  { key: 'DMR',     model: 'Sniper_2', label: 'Marksman', damage: 72, fireRate: 3.5, mag: 10, spread: 0.006, pellets: 1, auto: false, range: 320, reload: 1.6, adsFov: 38, recoil: 0.1, tracer: 0xbfffe0 },
+  { key: 'Burst',   model: 'Knife_2', label: 'Burst Rifle', damage: 22, fireRate: 16, mag: 24, spread: 0.018, pellets: 1, auto: true, range: 190, reload: 1.4, adsFov: 52, recoil: 0.045, tracer: 0xffe0a0 },
   { key: 'GL',      model: 'GrenadeLauncher', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
+  { key: 'RPG',     model: 'RocketLauncher', label: 'Rocket Launcher', damage: 0, fireRate: 0.7, mag: 2, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.6, adsFov: 62, recoil: 0.24, projectile: 'rocket' },
+  { key: 'Knife',   model: 'Knife_1', label: 'Knife', damage: 75, fireRate: 2.4, mag: 99, spread: 0, pellets: 1, auto: false, range: 4.5, reload: 0.1, adsFov: 70, recoil: 0.06, tracer: 0xffffff, melee: true },
   { key: 'Zip',     model: 'Pistol', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
 ]
 
