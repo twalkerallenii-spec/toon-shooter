@@ -294,8 +294,8 @@ export class Game {
     scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x241a3a, 1.0))
     const key = new THREE.DirectionalLight(0xfff0d0, 2.1); key.position.set(5, 9, 6); scene.add(key)
     const rim = new THREE.DirectionalLight(0x6a8cff, 1.6); rim.position.set(-6, 4, -6); scene.add(rim)
-    scene.add(Object.assign(new THREE.PointLight(0xff5aa0, 0.9, 34), { position: new THREE.Vector3(-5, 4, 3) }))
-    scene.add(Object.assign(new THREE.PointLight(0x5ad1ff, 0.9, 34), { position: new THREE.Vector3(7, 3, -2) }))
+    const accent1 = new THREE.PointLight(0xff5aa0, 0.9, 34); accent1.position.set(-5, 4, 3); scene.add(accent1)
+    const accent2 = new THREE.PointLight(0x5ad1ff, 0.9, 34); accent2.position.set(7, 3, -2); scene.add(accent2)
 
     const podCenter = 2.4
     this._podCenter = podCenter
