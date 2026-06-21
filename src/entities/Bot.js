@@ -34,6 +34,9 @@ export class Bot {
     this._wall = 0
     this._wander = new THREE.Vector3(position.x, 0, position.z)
     this._wanderCd = 0
+    this.objective = null // CTF: a {x,z} to advance toward when not fighting
+    this.forceGoal = null // CTF: a {x,z} to run to directly (carrying a flag)
+    this.carrying = null  // CTF: flag color this bot is carrying
 
     this.group = new THREE.Group()
     this.group.position.copy(position)
@@ -148,6 +151,23 @@ export class Bot {
       return false
     }
 
+    // CTF carrier: commit to running the flag to the goal, ignore combat.
+    if (this.forceGoal) {
+      const pc = this.group.position
+      TMP.set(this.forceGoal.x - pc.x, 0, this.forceGoal.z - pc.z)
+      let mv = false
+      if (TMP.lengthSq() > 0.5) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z); pc.addScaledVector(TMP, this.speed * 1.05 * dt); mv = true }
+      this._wall -= dt
+      if (this.world.cityCollider) {
+        if (this._wall <= 0) { this.world.cityCollider.pushOut(pc, 0.6, 1.0); this._wall = 0.15 }
+        const gy = this.world.cityCollider.groundY(pc.x, pc.z, pc.y + 3); pc.y = gy != null && gy >= 0 ? gy : 0
+      }
+      this.world.clampToArena(pc)
+      if (this.animator) { this.animator.play(mv ? 'Run' : 'Idle', { fade: 0.2 }); this.animator.update(dt) }
+      if (ctx.camera) this.tag.quaternion.copy(ctx.camera.quaternion)
+      return false
+    }
+
     // Acquire nearest valid target.
     let target = null, bestD = this.viewRange
     for (const c of ctx.combatants) {
@@ -180,6 +200,10 @@ export class Bot {
         this.shootCd = this.shootInterval * (0.7 + Math.random() * 0.8)
         this._shoot(target)
       }
+    } else if (this.objective) {
+      // CTF: advance toward the assigned objective (a flag/base) when not fighting.
+      TMP.set(this.objective.x - p.x, 0, this.objective.z - p.z)
+      if (TMP.lengthSq() > 1) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z); p.addScaledVector(TMP, this.speed * 0.85 * dt); moving = true }
     } else {
       // Wander.
       this._wanderCd -= dt

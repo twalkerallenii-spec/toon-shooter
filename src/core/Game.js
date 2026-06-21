@@ -37,7 +37,7 @@ function mulberryLobby(a) {
 // Solo combat modes (vs bots) on the normal arena. Each is a small rule tweak.
 const SOLO_MODES = {
   ffa: { label: 'FFA DEATHMATCH', bots: 7, role: 'fighter', killTarget: 15, map: 'outpost' },
-  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, startWeapon: 0, map: 'rooftops' },
+  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, killTarget: 15, startWeapon: 0, map: 'rooftops' },
   oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0, map: 'arena' },
   jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
   infect: { label: 'INFECTION', bots: 10, role: 'zombie', survive: 90, map: 'rooftops' },
@@ -504,6 +504,7 @@ export class Game {
     this.ctfMode = this.onlineMode === 'ctf'
     this.flags = this.ctfMode ? new Flags(this.world) : null
     this.ctf = null
+    if (this.ctfMode) this._initLocalCtf(); else this.localCtf = null
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
@@ -619,11 +620,38 @@ export class Game {
     // CPU players fill the match (online or offline) for bot modes.
     if (this.brMode) await this._spawnBots(12, 'fighter')
     else if (this.hnsMode) await this._spawnBots(8, 'hider')
+    else if (this.ctfMode) await this._spawnCtfBots()
     else if (this.modeCfg) {
       if (this.modeCfg.jugg) await this._spawnJuggernaut()
       else await this._spawnBots(this.modeCfg.bots || 7, this.modeCfg.role || 'fighter')
     }
     this.hud.setLoading('FINALIZING…', 96)
+  }
+
+  // Capture-the-Flag CPUs: enemy reds rush your flag, ally blues fight with you.
+  async _spawnCtfBots() {
+    this.myTeam = 'blue'
+    this.player.team = 'blue'
+    const NAMES = ['Ace', 'Blaze', 'Cyborg', 'Drift', 'Echo', 'Fang', 'Ghost', 'Havoc', 'Iris', 'Jolt', 'Kilo', 'Lynx']
+    const baseOf = (t) => this.world.bases.find((b) => b.team === t)
+    const ready = []
+    let n = 0
+    const spawnTeam = (team, count, char) => {
+      const base = baseOf(team)
+      const cx = base ? base.x : (team === 'red' ? this.world.arenaRadius * 0.6 : -this.world.arenaRadius * 0.6)
+      const cz = base ? base.z : 0
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2
+        const pos = new THREE.Vector3(cx + Math.cos(a) * 6, 0, cz + Math.sin(a) * 6)
+        const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[n++ % NAMES.length], position: pos, role: 'fighter', team, char: `models/characters/${char}.gltf` })
+        bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
+        if (bot.ready) ready.push(bot.ready)
+        this.bots.push(bot)
+      }
+    }
+    spawnTeam('red', 4, 'Character_Enemy')  // enemies — go for YOUR flag
+    spawnTeam('blue', 3, 'Character_Soldier') // allies — fight alongside you
+    await Promise.all(ready)
   }
 
   async _spawnJuggernaut() {
@@ -659,8 +687,17 @@ export class Game {
     if (attacker && attacker.kills != null) attacker.kills++
     if (!attacker) {
       this.kills = (this.kills || 0) + 1 // player kill (no bot attacker)
-      // Gun Game: each kill promotes you to the next weapon.
-      if (this.modeCfg?.gungame) { this.ggLevel++; this.weapons.switchTo(Math.min(this.ggLevel, this.weapons.defs.length - 1)) }
+      // Gun Game: each kill hands you a random gun (melee/grapple excluded — your
+      // knife stays as a constant backup).
+      if (this.modeCfg?.gungame) {
+        this.ggLevel++
+        const pool = this.weapons.defs.map((d, i) => i).filter((i) => {
+          const d = this.weapons.defs[i]; return !d.tool && !d.melee
+        })
+        const idx = pool[Math.floor(Math.random() * pool.length)]
+        this.weapons.ammoByWeapon[idx] = this.weapons.defs[idx].mag
+        this.weapons.switchTo(idx)
+      }
     }
   }
 
@@ -1043,6 +1080,108 @@ export class Game {
     return { localId: this.net?.id, localPos: this.player.position, remotePlayers: this.remotePlayers }
   }
 
+  // Self-contained CTF vs CPUs (used when no human opponents are present). Two
+  // flags, local pickup/capture, bots that rush and carry flags, first to 3 wins.
+  _initLocalCtf() {
+    this.localCtf = {
+      flags: { red: { state: 'home', x: 0, z: 0, holder: null }, blue: { state: 'home', x: 0, z: 0, holder: null } },
+      scores: { red: 0, blue: 0 },
+    }
+    this._ctfRot = 0
+  }
+
+  _updateLocalCtf(dt) {
+    const lc = this.localCtf
+    if (!lc || !this.flags) return
+    const baseOf = (t) => { const b = this.world.bases.find((bb) => bb.team === t); return b ? { x: b.x, z: b.z } : { x: t === 'red' ? 40 : -40, z: 0 } }
+    const home = { red: baseOf('red'), blue: baseOf('blue') }
+    const flagPos = (t) => {
+      const f = lc.flags[t]
+      if (f.state === 'carried' && f.holder) return { x: f.holder.position.x, z: f.holder.position.z }
+      if (f.state === 'dropped') return { x: f.x, z: f.z }
+      return home[t]
+    }
+    const dist2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz)
+
+    // A carrier that died drops the flag where it fell.
+    for (const t of ['red', 'blue']) {
+      const f = lc.flags[t]
+      if (f.state === 'carried' && (!f.holder || !f.holder.alive)) {
+        const fp = flagPos(t)
+        f.state = 'dropped'; f.x = fp.x; f.z = fp.z
+        if (f.holder && f.holder !== this.player) { f.holder.carrying = null; f.holder.forceGoal = null }
+        f.holder = null
+        this.hud.addKillFeed(`🏳 The ${t.toUpperCase()} flag was dropped`)
+      }
+    }
+
+    // Player (blue) — grab the red flag, run it home, return your own.
+    const P = this.player, mine = 'blue', enemy = 'red'
+    const ef = lc.flags[enemy], mf = lc.flags[mine]
+    if (P.alive) {
+      if (ef.state !== 'carried') {
+        const fp = flagPos(enemy)
+        if (dist2(P.position.x, P.position.z, fp.x, fp.z) < 3) { ef.state = 'carried'; ef.holder = P; this.hud.addKillFeed('🚩 You grabbed the RED flag!') }
+      }
+      if (ef.holder === P && mf.state === 'home' && dist2(P.position.x, P.position.z, home[mine].x, home[mine].z) < 5.5) {
+        lc.scores.blue++; ef.state = 'home'; ef.holder = null
+        this.hud.addKillFeed(`🏁 You captured! BLUE ${lc.scores.blue}`)
+      }
+      if (mf.state === 'dropped' && dist2(P.position.x, P.position.z, mf.x, mf.z) < 3) { mf.state = 'home'; mf.holder = null; this.hud.addKillFeed('↩ You returned your flag') }
+    }
+
+    // Bots — reds attack your flag, blues attack theirs; carriers run home.
+    for (const bot of this.bots) {
+      if (!bot.alive || !bot.team) continue
+      const bt = bot.team, ot = bt === 'red' ? 'blue' : 'red'
+      const of = lc.flags[ot], ownf = lc.flags[bt]
+      if (bot.carrying) {
+        bot.forceGoal = home[bt]
+        if (ownf.state === 'home' && dist2(bot.position.x, bot.position.z, home[bt].x, home[bt].z) < 5.5) {
+          lc.scores[bt]++; of.state = 'home'; of.holder = null
+          bot.carrying = null; bot.forceGoal = null; bot.objective = null
+          this.hud.addKillFeed(`🏴 ${bot.name} captured the ${ot.toUpperCase()} flag!`)
+        }
+      } else {
+        bot.forceGoal = null
+        if (of.state !== 'carried' && of.holder !== bot) {
+          const fp = flagPos(ot); bot.objective = fp
+          if (dist2(bot.position.x, bot.position.z, fp.x, fp.z) < 2.5) {
+            of.state = 'carried'; of.holder = bot; bot.carrying = ot
+            this.hud.addKillFeed(`🚩 ${bot.name} took the ${ot.toUpperCase()} flag!`)
+          }
+        } else {
+          bot.objective = home[bt] // defend home when the flag is already taken
+        }
+      }
+    }
+
+    // Render both flags.
+    this._ctfRot += dt * 1.2
+    for (const t of ['red', 'blue']) {
+      const fp = flagPos(t), m = this.flags.flags[t]
+      m.position.set(fp.x, lc.flags[t].state === 'carried' ? 0.2 : 0, fp.z)
+      m.rotation.y = this._ctfRot
+    }
+
+    // HUD + win.
+    this.hud.setTeamScores(lc.scores.red, lc.scores.blue, true)
+    let obj = 'Capture the RED flag →'
+    if (ef.holder === P) obj = '🚩 You have the RED flag — run it to base!'
+    else if (mf.state !== 'home') obj = '⚠ Your flag is taken — stop them!'
+    this.hud.setObjective(obj)
+    const TARGET = 3
+    if (!this._matchOver) {
+      for (const t of ['red', 'blue']) {
+        if (lc.scores[t] >= TARGET) {
+          this._matchOver = true
+          const won = t === mine
+          this._winMatch(won ? 'VICTORY' : 'DEFEAT', `${t.toUpperCase()} wins the flag battle ${lc.scores.blue}–${lc.scores.red}!`, won)
+        }
+      }
+    }
+  }
+
   // Capture-the-Flag interactions (run each frame in CTF). Server is authoritative;
   // we just send intents based on proximity and render flags.
   _updateCtf(dt) {
@@ -1274,12 +1413,12 @@ export class Game {
         const m = Math.floor(this._surviveTime / 60), s = String(Math.floor(this._surviveTime % 60)).padStart(2, '0')
         this.hud.setStormTimer(`🧟 SURVIVE  ⏱ ${m}:${s}   Zombies: ${left}`)
         if (this._surviveTime <= 0) { this._matchOver = true; this._winMatch('SURVIVED!', 'You outlasted the infection.') }
+      } else if (cfg.gungame) {
+        this.hud.setStormTimer(`🔫 GUN GAME  ☠ ${this.kills} / ${cfg.killTarget}  ·  random guns`)
+        if (this.kills >= cfg.killTarget) { this._matchOver = true; this._winMatch('GUN GAME WIN', `${cfg.killTarget} eliminations with random guns!`) }
       } else if (cfg.killTarget) {
         this.hud.setStormTimer(`☠ KILLS ${this.kills} / ${cfg.killTarget}`)
         if (this.kills >= cfg.killTarget) { this._matchOver = true; this._winMatch('VICTORY', `${cfg.killTarget} eliminations!`) }
-      } else if (cfg.gungame) {
-        this.hud.setStormTimer(`🔫 GUN ${Math.min(this.ggLevel + 1, this.weapons.defs.length)} / ${this.weapons.defs.length}`)
-        if (this.ggLevel >= this.weapons.defs.length) { this._matchOver = true; this._winMatch('GUN GAME WIN', 'Mastered every weapon!') }
       } else if (cfg.jugg) {
         if (this.jugg && !this.jugg.alive) { this._matchOver = true; this._winMatch('JUGGERNAUT DOWN', 'You took down the juggernaut!') }
       }
@@ -1343,7 +1482,7 @@ export class Game {
     // Waves only in Co-op (solo or online).
     const coopWaves = this.net ? this.onlineMode === 'coop' : this.soloMode === 'coop'
     if (coopWaves) this.spawner.update(dt, this.player, this.camera)
-    if (this.ctfMode) this._updateCtf(dt)
+    if (this.ctfMode) { if (this.remotePlayers.size === 0) this._updateLocalCtf(dt); else this._updateCtf(dt) }
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))
       this.hud.setStormTimer(this.zone.statusText())
