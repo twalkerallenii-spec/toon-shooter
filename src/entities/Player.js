@@ -49,6 +49,8 @@ export class Player {
     this.sprinting = false
     this.bobT = 0
     this.recoil = 0
+    this.swingT = 0        // melee slash timer (seconds remaining)
+    this.swingDur = 0.3
     this.shootingTimer = 0
     this._spacePrev = false
     this._vaultCd = 0
@@ -128,6 +130,8 @@ export class Player {
     this.camera.add(this.gun)
   }
 
+  meleeSwing() { this.swingT = this.swingDur } // trigger a knife slash animation
+
   setModel() {} // kept for API compatibility
 
   setThirdPerson(on) { this.thirdPerson = on }
@@ -185,6 +189,7 @@ export class Player {
     this._handleMove(dt)
     if (this.shootingTimer > 0) this.shootingTimer -= dt
     this.recoil *= Math.max(0, 1 - dt * 9) // recover from kick
+    if (this.swingT > 0) this.swingT = Math.max(0, this.swingT - dt)
 
     // Smooth ADS transition + FOV zoom + sprint FOV kick.
     const adsTarget = this.adsActive && this.alive ? 1 : 0
@@ -455,16 +460,28 @@ export class Player {
     // Recoil kicks the view up briefly.
     this.camera.rotation.set(this.pitch + this.recoil, this.yaw, 0)
 
-    // Weapon bob + recoil on the viewmodel.
+    // Weapon bob + recoil on the viewmodel (or a melee slash arc).
     if (this.gun) {
-      const bx = (this.moving && this.onGround) ? Math.cos(this.bobT) * 0.012 : 0
-      const by = (this.moving && this.onGround) ? Math.abs(Math.sin(this.bobT)) * 0.014 : 0
-      this.gun.position.set(
-        this.gunBase.x + bx,
-        this.gunBase.y + by,
-        this.gunBase.z + this.recoil * 0.5 // kick toward camera
-      )
-      this.gun.rotation.x = -this.recoil * 1.2
+      if (this.swingT > 0) {
+        // Knife slash: sweep diagonally across the screen and back.
+        const p = 1 - this.swingT / this.swingDur // 0 -> 1
+        const s = Math.sin(p * Math.PI)            // 0 -> 1 -> 0
+        this.gun.position.set(
+          this.gunBase.x - s * 0.22,
+          this.gunBase.y + s * 0.10,
+          this.gunBase.z - s * 0.18 // thrust forward
+        )
+        this.gun.rotation.set(s * 0.5, -s * 0.6, -s * 1.7) // big roll = the slash
+      } else {
+        const bx = (this.moving && this.onGround) ? Math.cos(this.bobT) * 0.012 : 0
+        const by = (this.moving && this.onGround) ? Math.abs(Math.sin(this.bobT)) * 0.014 : 0
+        this.gun.position.set(
+          this.gunBase.x + bx,
+          this.gunBase.y + by,
+          this.gunBase.z + this.recoil * 0.5 // kick toward camera
+        )
+        this.gun.rotation.set(-this.recoil * 1.2, 0, 0)
+      }
     }
   }
 }

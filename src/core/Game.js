@@ -1426,6 +1426,7 @@ export class Game {
       const res = this.weapons.tryFire(this.player.getAimRay(), targets, muzzle, ads, remotes)
       if (res.fired) {
         firedThisFrame = true
+        if (this.weapons.def.melee) this.player.meleeSwing() // knife slash motion
         if (res.tool === 'grapple') { this._fireGrapple() }
         // Floating damage number (white, gold on headshot).
         if (res.dmg > 0 && res.hitPos) this._damageNumber(res.hitPos, Math.round(res.dmg), res.headshot)

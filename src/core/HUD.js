@@ -115,7 +115,6 @@ export class HUD {
   initWeapons(defs) {
     this.el.weaponList.innerHTML = defs
       .map((d, i) => `<div class="wpn rar-${d.rarity || 'common'}" data-i="${i}">
-        <span class="wpn-slot">${i + 1}</span>
         <span class="wpn-ico">${d.ico || '🔫'}</span>
         <span class="wpn-key">${d.key}</span>
       </div>`)
