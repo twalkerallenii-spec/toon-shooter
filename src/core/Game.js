@@ -93,6 +93,12 @@ export class Game {
     this._onResize = () => this._resize()
     window.addEventListener('resize', this._onResize)
 
+    // Claim buttons on daily challenges (event delegation; list is re-rendered).
+    document.getElementById('challenge-list')?.addEventListener('click', (e) => {
+      const b = e.target.closest('.ch-claim'); if (!b) return
+      this._claimDaily(parseInt(b.dataset.ci, 10))
+    })
+
     // Animated lobby scene behind the menu.
     this._buildLobby()
     this._lobbyLoop()
@@ -500,6 +506,7 @@ export class Game {
     s.kills = (s.kills || 0) + n
     s.xp = (s.xp || 0) + 30 * n
     localStorage.setItem('ts_stats', JSON.stringify(s))
+    this._dailyProgress('kills', n)
     this._populateLobby()
   }
 
@@ -513,6 +520,7 @@ export class Game {
     s.wins = (s.wins || 0) + (won ? 1 : 0)
     s.xp = (s.xp || 0) + (won ? 500 : 200)
     localStorage.setItem('ts_stats', JSON.stringify(s))
+    this._dailyProgress('matches'); if (won) this._dailyProgress('wins')
     // Coins: earn from kills + a win bonus.
     const coinGain = k * 10 + (won ? 100 : 25)
     this._setCoins(this._coins() + coinGain)
@@ -574,6 +582,55 @@ export class Game {
     this._populateLobby()
   }
 
+  // ---- Rotating daily challenges ----
+  _dailies() {
+    const today = new Date().toISOString().slice(0, 10)
+    let d = null
+    try { d = JSON.parse(localStorage.getItem('ts_daily') || 'null') } catch {}
+    if (!d || d.day !== today || !Array.isArray(d.ch)) {
+      d = { day: today, ch: this._rollDailies(today) }
+      localStorage.setItem('ts_daily', JSON.stringify(d))
+    }
+    return d
+  }
+
+  _rollDailies(seedStr) {
+    const POOL = [
+      { id: 'kills', t: 'Get {n} eliminations', n: [8, 12, 15], xp: 200, coins: 120 },
+      { id: 'wins', t: 'Win {n} match', n: [1, 2], xp: 300, coins: 220 },
+      { id: 'matches', t: 'Play {n} matches', n: [3, 5], xp: 150, coins: 80 },
+      { id: 'chests', t: 'Open {n} loot chests', n: [5, 8], xp: 180, coins: 110 },
+      { id: 'headshots', t: 'Land {n} headshots', n: [5, 10], xp: 220, coins: 150 },
+    ]
+    let seed = 0; for (const c of seedStr) seed = (seed * 31 + c.charCodeAt(0)) | 0
+    const rng = mulberryLobby(seed)
+    const idx = POOL.map((_, i) => i)
+    for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1));[idx[i], idx[j]] = [idx[j], idx[i]] }
+    return idx.slice(0, 3).map((i) => {
+      const c = POOL[i]; const target = c.n[Math.floor(rng() * c.n.length)]
+      return { id: c.id, t: c.t.replace('{n}', target), target, prog: 0, claimed: false, xp: c.xp, coins: c.coins }
+    })
+  }
+
+  _dailyProgress(id, n = 1) {
+    const d = this._dailies()
+    let changed = false
+    for (const c of d.ch) if (c.id === id && !c.claimed && c.prog < c.target) { c.prog = Math.min(c.target, c.prog + n); changed = true }
+    if (changed) { localStorage.setItem('ts_daily', JSON.stringify(d)); if (this.state === STATE.MENU) this._populateLobby() }
+  }
+
+  _claimDaily(i) {
+    const d = this._dailies()
+    const c = d.ch[i]
+    if (!c || c.claimed || c.prog < c.target) return
+    c.claimed = true
+    localStorage.setItem('ts_daily', JSON.stringify(d))
+    const s = this._stats(); s.xp = (s.xp || 0) + c.xp; localStorage.setItem('ts_stats', JSON.stringify(s))
+    this._setCoins(this._coins() + (c.coins || 0))
+    this.audio?.pickup?.()
+    this._populateLobby()
+  }
+
   // Fill the lobby panels (level, XP, season, challenges, career, avatar).
   _populateLobby() {
     const $ = (id) => document.getElementById(id)
@@ -596,17 +653,18 @@ export class Game {
     if ($('party-you')) $('party-you').textContent = name
     const av = skinOf(this.character).ico
     if ($('pc-avatar')) $('pc-avatar').textContent = av
-    // Daily challenges with live progress from stats.
-    const ch = [
-      { t: 'Get 20 kills', cur: Math.min(kills, 20), max: 20, xp: 200 },
-      { t: 'Win a match', cur: Math.min(wins, 1), max: 1, xp: 300 },
-      { t: 'Play 5 matches', cur: Math.min(matches, 5), max: 5, xp: 150 },
-    ]
+    // Rotating DAILY challenges with live progress + claimable rewards.
+    const d = this._dailies()
     const list = $('challenge-list')
-    if (list) list.innerHTML = ch.map((c) =>
-      `<li><div class="ch-row"><span>${c.t}</span><span class="xp">+${c.xp}</span></div>
-       <div class="ch-bar"><i style="width:${(c.cur / c.max) * 100}%"></i></div>
-       <div style="font-size:10px;opacity:.6">${c.cur}/${c.max}</div></li>`).join('')
+    if (list) list.innerHTML = d.ch.map((c, i) => {
+      const done = c.prog >= c.target
+      const right = c.claimed ? '<span class="ch-claimed">✓ CLAIMED</span>'
+        : done ? `<button class="ch-claim" data-ci="${i}">CLAIM +${c.xp}</button>`
+          : `<span class="xp">+${c.xp}</span>`
+      return `<li><div class="ch-row"><span>${c.t}</span>${right}</div>
+       <div class="ch-bar"><i style="width:${Math.min(100, (c.prog / c.target) * 100)}%"></i></div>
+       <div style="font-size:10px;opacity:.6">${Math.min(c.prog, c.target)}/${c.target} · +${c.coins}🪙</div></li>`
+    }).join('')
 
     // Rankings: a local leaderboard (your saved kills vs seeded rivals).
     const rl = $('rank-list')
@@ -722,8 +780,10 @@ export class Game {
     this._supplyTimer = 38 // BR supply-drop countdown
     this.buildMode = false; this._builds = []; this._buildGhost = null; this._buildGhostPiece = null
     this.pickups.onPickup = (type, wi) => {
+      if (type === 'chest') { this._dailyProgress('chests'); return }
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
-        : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
+        : type === 'health' ? '+35 Health' : type === 'medkit' ? 'Full Health' : type === 'shield' ? '+50 Shield'
+          : type === 'bigshield' ? 'Full Shield' : 'Ammo refilled'
       this.hud.addKillFeed(`🟢 ${label}`)
       if (type === 'weapon') this.hud.setOwned(this.weapons.owned)
     }
@@ -1791,7 +1851,7 @@ export class Game {
         if (res.tool === 'grapple') { this._fireGrapple() }
         // Floating damage number (white, gold on headshot).
         if (res.dmg > 0 && res.hitPos) this._damageNumber(res.hitPos, Math.round(res.dmg), res.headshot)
-        if (res.headshot) this.audio.headshot()
+        if (res.headshot) { this.audio.headshot(); this._dailyProgress('headshots') }
         if (res.killed) { this.hud.hitMarker(res.headshot ? 'kill' : true); this.audio.kill(); this._playerKill() }
         else if (res.hit) { this.hud.hitMarker(res.headshot); this.audio.hit() }
         if (res.playerHit != null && this.net) {
@@ -2300,10 +2360,14 @@ export class Game {
   _buildPlacement() {
     const p = this.player.position
     const baseY = Math.max(0, Math.round(p.y / 4) * 4)
-    const fwd = new THREE.Vector3(Math.sin(this.player.yaw), 0, Math.cos(this.player.yaw))
+    // Use the REAL camera look direction (where you're aiming), not raw yaw —
+    // otherwise the piece lands behind you.
+    const aim = this.player.getAimRay()
+    const fwd = new THREE.Vector3(aim.dir.x, 0, aim.dir.z)
+    if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, 1); else fwd.normalize()
     const tx = Math.round((p.x + fwd.x * 4) / 4) * 4
     const tz = Math.round((p.z + fwd.z * 4) / 4) * 4
-    const yawSnap = Math.round(this.player.yaw / (Math.PI / 2)) * (Math.PI / 2)
+    const yawSnap = Math.round(Math.atan2(fwd.x, fwd.z) / (Math.PI / 2)) * (Math.PI / 2)
     return { tx, tz, baseY, yawSnap }
   }
 
