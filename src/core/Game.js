@@ -47,6 +47,21 @@ const SOLO_MODES = {
   snd: { label: 'SEARCH & DESTROY', snd: true, bots: 6, role: 'fighter', oneLife: true, map: 'outpost' },
 }
 
+// Weapons buyable in the Armory (index = position in the WEAPONS roster). Bought
+// weapons spawn in your loadout every match.
+const WEAPON_SHOP = [
+  { i: 1, label: 'AK-47', ico: '🔫', price: 400 },
+  { i: 2, label: 'SMG', ico: '🔫', price: 350 },
+  { i: 3, label: 'Shotgun', ico: '💥', price: 300 },
+  { i: 8, label: 'Burst Rifle', ico: '🔫', price: 450 },
+  { i: 5, label: 'Revolver', ico: '🔫', price: 550 },
+  { i: 7, label: 'Marksman', ico: '🎯', price: 650 },
+  { i: 4, label: 'Sniper', ico: '🎯', price: 800 },
+  { i: 9, label: 'Grenade Launcher', ico: '🧨', price: 900 },
+  { i: 6, label: 'Minigun', ico: '🌀', price: 1200 },
+  { i: 10, label: 'Rocket Launcher', ico: '🚀', price: 1500 },
+]
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas
@@ -104,6 +119,40 @@ export class Game {
     this._lobbyLoop()
     this._populateLobby()
     this._connectPresence() // appear online + see who else is on
+    this._promptPermanentName() // first-time players must pick a permanent name
+  }
+
+  // Lock the name field once a name is set — it's permanent.
+  _lockNameInput() {
+    const n = document.getElementById('mp-name'); if (!n) return
+    const name = localStorage.getItem('ts_name')
+    if (name) { n.value = name; n.readOnly = true; n.title = 'Your name is permanent'; n.classList.add('locked') }
+  }
+
+  // First-time gate: force a permanent name choice before playing.
+  _promptPermanentName() {
+    if (localStorage.getItem('ts_name')) { this._lockNameInput(); return false }
+    if (document.getElementById('name-gate')) return true
+    const ov = document.createElement('div'); ov.id = 'name-gate'
+    ov.innerHTML = `<div class="ng-card">
+        <h2>CHOOSE YOUR NAME</h2>
+        <p>⚠ This name is <b>PERMANENT</b>. You cannot change it later — choose carefully.</p>
+        <input id="ng-input" maxlength="16" placeholder="Enter name" autocomplete="off" spellcheck="false" />
+        <button id="ng-go">LOCK IT IN</button>
+        <div id="ng-err"></div>
+      </div>`
+    document.body.appendChild(ov)
+    const input = ov.querySelector('#ng-input'), err = ov.querySelector('#ng-err')
+    setTimeout(() => input.focus(), 50)
+    const submit = () => {
+      const v = input.value.trim()
+      if (v.length < 2) { err.textContent = 'Name must be at least 2 characters.'; return }
+      localStorage.setItem('ts_name', v)
+      this._lockNameInput(); ov.remove(); this._populateLobby()
+    }
+    ov.querySelector('#ng-go').addEventListener('click', submit)
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit() })
+    return true
   }
 
   _wireUI() {
@@ -128,7 +177,12 @@ export class Game {
     serverInput.addEventListener('change', () => localStorage.setItem('ts_server', serverInput.value.trim()))
     const nameInput = document.getElementById('mp-name')
     if (localStorage.getItem('ts_name')) nameInput.value = localStorage.getItem('ts_name')
-    nameInput.addEventListener('change', () => { localStorage.setItem('ts_name', nameInput.value.trim()); this._populateLobby() })
+    nameInput.addEventListener('change', () => {
+      if (localStorage.getItem('ts_name')) return // name is permanent
+      const v = nameInput.value.trim(); if (v.length < 2) return
+      localStorage.setItem('ts_name', v); this._lockNameInput(); this._populateLobby()
+    })
+    this._lockNameInput()
     document.getElementById('online-btn').addEventListener('click', () => {
       if (this.state === STATE.PLAYING) return
       localStorage.setItem('ts_server', serverInput.value.trim())
@@ -203,6 +257,11 @@ export class Game {
     // Locker shows only owned skins (click to equip); Store sells the rest.
     this._renderLocker()
     this._renderStore()
+    this._renderWeaponStore()
+    document.getElementById('weapon-grid')?.addEventListener('click', (e) => {
+      const card = e.target.closest('.char-card'); if (!card || card.dataset.weapon == null) return
+      this._buyWeapon(parseInt(card.dataset.weapon, 10))
+    })
     document.getElementById('char-grid')?.addEventListener('click', (e) => {
       const card = e.target.closest('.char-card'); if (!card) return
       this.character = card.dataset.char
@@ -353,6 +412,7 @@ export class Game {
   // Every game drops into an online match (bots fill it; friends can join the
   // same room). Falls back to offline if the server can't be reached.
   _startSelectedMode() {
+    if (this._promptPermanentName()) return // must pick a permanent name first
     const mode = document.querySelector('.event-tile.active')?.dataset.mode
       || document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
     this.startOnline(mode)
@@ -582,6 +642,32 @@ export class Game {
     this._populateLobby()
   }
 
+  // ---- Purchasable weapons (spawn in your loadout every match) ----
+  _ownedWeapons() {
+    try { const a = JSON.parse(localStorage.getItem('ts_owned_weapons') || '[]'); return Array.isArray(a) ? a : [] } catch { return [] }
+  }
+  _saveOwnedWeapons(a) { localStorage.setItem('ts_owned_weapons', JSON.stringify([...new Set(a)])) }
+
+  _renderWeaponStore() {
+    const grid = document.getElementById('weapon-grid'); if (!grid) return
+    const owned = this._ownedWeapons()
+    grid.innerHTML = WEAPON_SHOP.map((w) => {
+      if (owned.includes(w.i)) return `<button class="char-card owned"><span class="cc-ico">${w.ico}</span>${w.label}<small>OWNED</small></button>`
+      return `<button class="char-card buy" data-weapon="${w.i}"><span class="cc-ico">${w.ico}</span>${w.label}<small>◆ ${w.price}</small></button>`
+    }).join('')
+  }
+
+  _buyWeapon(i) {
+    const w = WEAPON_SHOP.find((x) => x.i === i); if (!w) return
+    const owned = this._ownedWeapons()
+    if (owned.includes(i)) return
+    if (this._coins() < w.price) { this.hud.addKillFeed?.(`Not enough ◆ for ${w.label}`); return }
+    this._setCoins(this._coins() - w.price)
+    owned.push(i); this._saveOwnedWeapons(owned)
+    this.audio?.pickup?.()
+    this._renderWeaponStore(); this._populateLobby()
+  }
+
   // ---- Rotating daily challenges ----
   _dailies() {
     const today = new Date().toISOString().slice(0, 10)
@@ -763,7 +849,8 @@ export class Game {
     // Apply combat-mode tweaks.
     if (this.modeCfg?.lowHp) { this.player.maxHp = 1; this.player.hp = 1 }
     // Fortnite-style: spawn with just a pistol + knife and loot the rest.
-    const loadout = [0, 11] // Pistol, Knife
+    // Pistol + Knife always, plus any weapons bought in the Armory.
+    const loadout = [...new Set([0, 11, ...this._ownedWeapons().filter((i) => i >= 0 && i < this.weapons.defs.length)])]
     if (this.modeCfg?.startWeapon != null && !loadout.includes(this.modeCfg.startWeapon)) loadout.push(this.modeCfg.startWeapon)
     this.weapons.setLoadout(loadout)
     this.weapons.index = this.modeCfg?.startWeapon ?? 0

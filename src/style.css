@@ -488,6 +488,17 @@ body.touch #rank-btn { display: block; }
 .dmg-dir.show { animation: dmgdir 0.9s ease-out; }
 .dmg-dir .dmg-arc { position: absolute; left: 50%; top: -4px; width: 170px; height: 54px; transform: translateX(-50%); border-radius: 0 0 50% 50%; background: radial-gradient(ellipse at 50% -30%, rgba(255,45,45,0.95), rgba(255,45,45,0) 72%); }
 @keyframes dmgdir { 0% { opacity: 0; } 12% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Permanent-name gate */
+#name-gate { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(8,10,24,0.82); backdrop-filter: blur(6px); }
+#name-gate .ng-card { width: min(420px, 90vw); background: linear-gradient(180deg, #1a2150, #121636); border: 1px solid rgba(120,150,255,0.35); border-radius: 16px; padding: 26px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+#name-gate h2 { margin: 0 0 8px; letter-spacing: 1px; color: #cfe0ff; }
+#name-gate p { font-size: 13px; color: #ffd24a; margin: 0 0 16px; }
+#name-gate input { width: 100%; box-sizing: border-box; padding: 12px 14px; font-size: 16px; border-radius: 10px; border: 1px solid rgba(150,170,255,0.4); background: rgba(0,0,0,0.4); color: #fff; text-align: center; }
+#name-gate #ng-go { margin-top: 14px; width: 100%; padding: 12px; font-weight: 800; letter-spacing: 1px; border: none; border-radius: 10px; cursor: pointer; color: #0a0e1e; background: linear-gradient(180deg, #6cf0ff, #2aa8ff); }
+#name-gate #ng-go:hover { filter: brightness(1.1); }
+#name-gate #ng-err { color: #ff6a6a; font-size: 12px; min-height: 16px; margin-top: 8px; }
+#mp-name.locked { opacity: 0.85; cursor: not-allowed; }
 @keyframes claimpulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 
 /* Players online (left column, under the matchmaking card) */
