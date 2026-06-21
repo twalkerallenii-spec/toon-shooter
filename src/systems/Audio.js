@@ -103,4 +103,38 @@ export class Audio {
     this._noise(0.12, { gain: 0.4, freq: 500, q: 0.6 })
     this._tone(180, 0.12, { gain: 0.3, type: 'sawtooth', to: 90 })
   }
+
+  // Knife slash: a quick airy whoosh.
+  whoosh() {
+    this._noise(0.18, { gain: 0.35, type: 'bandpass', freq: 1400, q: 1.2 })
+    this._tone(900, 0.16, { gain: 0.12, type: 'sine', to: 220 })
+  }
+
+  // Bright headshot confirm.
+  headshot() {
+    this._tone(1700, 0.06, { gain: 0.28, type: 'square', to: 2400 })
+    setTimeout(() => this._tone(2600, 0.06, { gain: 0.2, type: 'square' }), 55)
+  }
+
+  // Footstep (throttled by the caller).
+  footstep() {
+    this._noise(0.07, { gain: 0.12, type: 'lowpass', freq: 420, q: 0.7 })
+  }
+
+  // ---- Lobby music: a gentle looping arpeggio ----------------------------
+  startMusic() {
+    if (!this.ctx || this._musicTimer) return
+    const scale = [220, 277, 330, 440, 330, 277]
+    let i = 0
+    const step = () => {
+      const f = scale[i % scale.length]; i++
+      this._tone(f, 0.5, { gain: 0.05, type: 'triangle' })
+      this._tone(f * 0.5, 0.7, { gain: 0.035, type: 'sine' })
+    }
+    step()
+    this._musicTimer = setInterval(step, 460)
+  }
+  stopMusic() {
+    if (this._musicTimer) { clearInterval(this._musicTimer); this._musicTimer = null }
+  }
 }

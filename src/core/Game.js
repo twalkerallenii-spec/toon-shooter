@@ -40,7 +40,7 @@ const SOLO_MODES = {
   gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, killTarget: 15, startWeapon: 0, map: 'outpost' },
   oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0, map: 'arena' },
   jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
-  infect: { label: 'INFECTION', infect: true, bots: 10, startZombies: 2, map: 'outpost' },
+  infect: { label: 'INFECTION', infect: true, bots: 9, startZombies: 3, map: 'outpost' },
 }
 
 export class Game {
@@ -164,21 +164,20 @@ export class Game {
       })
     })
 
-    // Locker — pick your character. Grid is generated from SKINS.
-    const grid = document.getElementById('char-grid')
-    if (grid) {
-      grid.innerHTML = SKINS.map((s) =>
-        `<button class="char-card" data-char="${s.id}"><span class="cc-ico">${s.ico}</span>${s.label}</button>`).join('')
-    }
-    document.querySelectorAll('#char-grid .char-card').forEach((card) => {
-      card.classList.toggle('active', card.dataset.char === this.character)
-      card.addEventListener('click', () => {
-        this.character = card.dataset.char
-        localStorage.setItem('ts_char', this.character)
-        document.querySelectorAll('#char-grid .char-card').forEach((c) => c.classList.toggle('active', c === card))
-        this._setLobbyCharacter(this.character)
-        this._populateLobby()
-      })
+    // Locker shows only owned skins (click to equip); Store sells the rest.
+    this._renderLocker()
+    this._renderStore()
+    document.getElementById('char-grid')?.addEventListener('click', (e) => {
+      const card = e.target.closest('.char-card'); if (!card) return
+      this.character = card.dataset.char
+      localStorage.setItem('ts_char', this.character)
+      this._renderLocker()
+      this._setLobbyCharacter(this.character)
+      this._populateLobby()
+    })
+    document.getElementById('store-grid')?.addEventListener('click', (e) => {
+      const card = e.target.closest('.char-card'); if (!card) return
+      this._buySkin(card.dataset.char)
     })
 
     // Settings (sensitivity + invert-Y + third-person), persisted to localStorage.
@@ -238,6 +237,12 @@ export class Game {
     // Discard-weapon button.
     document.getElementById('drop-btn')?.addEventListener('click', () => {
       if (this.state === STATE.PLAYING) this._discardWeapon()
+    })
+
+    // Unlock audio + start lobby music on the first lobby interaction.
+    this.hud.el.overlay?.addEventListener('click', () => {
+      this.audio.resume()
+      if (this.state === STATE.MENU) this.audio.startMusic()
     })
 
     // Victory screen -> back to the lobby.
@@ -423,12 +428,59 @@ export class Game {
     try { return JSON.parse(localStorage.getItem('ts_stats') || '{}') } catch { return {} }
   }
   _recordMatch(won) {
+    if (this._recorded) return // once per match (win, death, or quit)
+    this._recorded = true
     const s = this._stats()
+    const k = this.kills || this.enemyKills || 0
     s.matches = (s.matches || 0) + 1
-    s.kills = (s.kills || 0) + (this.kills || this.enemyKills || 0)
+    s.kills = (s.kills || 0) + k
     s.wins = (s.wins || 0) + (won ? 1 : 0)
-    s.xp = (s.xp || 0) + (won ? 300 : 120) + (this.kills || this.enemyKills || 0) * 20
+    s.xp = (s.xp || 0) + (won ? 300 : 120) + k * 20
     localStorage.setItem('ts_stats', JSON.stringify(s))
+    // Coins: earn from kills + a win bonus.
+    this._setCoins(this._coins() + k * 10 + (won ? 100 : 25))
+  }
+
+  // ---- Economy: coins + owned skins (Store/Locker) ----------------------
+  _coins() { return parseInt(localStorage.getItem('ts_coins') || '600', 10) || 0 }
+  _setCoins(n) { localStorage.setItem('ts_coins', String(Math.max(0, Math.floor(n)))) }
+  _ownedSkins() {
+    try {
+      const a = JSON.parse(localStorage.getItem('ts_owned') || 'null')
+      if (Array.isArray(a) && a.length) return a
+    } catch { /* ignore */ }
+    return ['Character_Soldier', 'Character_Hazmat', 'Character_Enemy']
+  }
+  _saveOwned(arr) { localStorage.setItem('ts_owned', JSON.stringify([...new Set(arr)])) }
+
+  _renderLocker() {
+    const grid = document.getElementById('char-grid'); if (!grid) return
+    const owned = this._ownedSkins()
+    if (!owned.includes(this.character)) { this.character = owned[0]; localStorage.setItem('ts_char', this.character) }
+    grid.innerHTML = SKINS.filter((s) => owned.includes(s.id)).map((s) =>
+      `<button class="char-card ${s.id === this.character ? 'active' : ''}" data-char="${s.id}"><span class="cc-ico">${s.ico}</span>${s.label}</button>`).join('')
+  }
+
+  _renderStore() {
+    const grid = document.getElementById('store-grid'); if (!grid) return
+    const owned = this._ownedSkins()
+    grid.innerHTML = SKINS.map((s) => {
+      if (owned.includes(s.id)) return `<button class="char-card owned"><span class="cc-ico">${s.ico}</span>${s.label}<small>OWNED</small></button>`
+      return `<button class="char-card buy" data-char="${s.id}"><span class="cc-ico">${s.ico}</span>${s.label}<small>◆ ${s.price}</small></button>`
+    }).join('')
+  }
+
+  _buySkin(id) {
+    const skin = SKINS.find((s) => s.id === id); if (!skin) return
+    const owned = this._ownedSkins()
+    if (owned.includes(id)) return
+    if (this._coins() < skin.price) { this.hud.addKillFeed?.(`Not enough ◆ for ${skin.label}`); return }
+    this._setCoins(this._coins() - skin.price)
+    owned.push(id); this._saveOwned(owned)
+    this.character = id; localStorage.setItem('ts_char', id)
+    this._renderStore(); this._renderLocker()
+    this._setLobbyCharacter(id)
+    this._populateLobby()
   }
 
   // Fill the lobby panels (level, XP, season, challenges, career, avatar).
@@ -447,6 +499,7 @@ export class Game {
     if ($('st-kills')) $('st-kills').textContent = kills
     if ($('st-matches')) $('st-matches').textContent = matches
     if ($('st-kd')) $('st-kd').textContent = (kills / Math.max(1, matches)).toFixed(1)
+    if ($('coin-count')) $('coin-count').textContent = this._coins().toLocaleString()
     const name = localStorage.getItem('ts_name') || (document.getElementById('mp-name')?.value) || 'Recruit'
     if ($('pc-name')) $('pc-name').textContent = name
     if ($('party-you')) $('party-you').textContent = name
@@ -480,6 +533,7 @@ export class Game {
 
   // Return to the lobby menu (from victory/game-over).
   _toLobby() {
+    this._recordMatch(false) // save kills/XP/coins even if you just quit (deduped)
     this.state = STATE.MENU
     this.hud.hide()
     this.hud.hideVictory()
@@ -487,6 +541,7 @@ export class Game {
     this.hud.el.overlay.classList.remove('hidden')
     this.hud.el.startBtn.textContent = 'START MATCH'
     this._populateLobby() // refresh stats/level after the match
+    this.audio.startMusic()
     this._lobbyClock.getDelta() // reset dt
     this._lobbyLoop()
   }
@@ -546,6 +601,7 @@ export class Game {
     this.player.onLand = (pos, dbl) => this.particles.emit({ x: pos.x, y: 0.2, z: pos.z }, dbl ? 10 : 8, { color: [0.75, 0.75, 0.7], speed: dbl ? 5 : 3, size: 0.6, life: 0.4, up: 1 })
     this._shake = 0
     this._streak = 0; this._lastKillT = -99; this._matchT = 0
+    this.kills = 0; this._recorded = false // stats recorded once per match
     this.pickups.onPickup = (type, wi) => {
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
         : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
@@ -566,7 +622,8 @@ export class Game {
     this.weapons.onFire = () => {
       this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
       this.player.notifyFired() // drives the shoot animation + aim facing
-      this.audio.shoot(this.weapons.def.key)
+      if (this.weapons.def.melee) this.audio.whoosh()
+      else this.audio.shoot(this.weapons.def.key)
     }
     this.weapons.onReloadStart = () => { this.hud.setReloading(true); this.audio.reload() }
     this.weapons.onReloadEnd = () => {
@@ -700,9 +757,9 @@ export class Game {
       const r = HALF * (0.35 + Math.random() * 0.5)
       const pos = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)
       const isZombie = i < startZombies
-      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos, role: isZombie ? 'zombie' : 'fighter', team: isZombie ? null : 'human', char: `models/characters/${chars[i % chars.length]}.gltf` })
+      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos, role: isZombie ? 'zombie' : 'fighter', team: isZombie ? null : 'human', hp: isZombie ? 200 : 100, char: `models/characters/${chars[i % chars.length]}.gltf` })
       bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
-      if (isZombie && bot.ready) bot.ready.then(() => applyTint(bot.group, 0x55dd55))
+      if (isZombie) { bot.speed = 7.6; if (bot.ready) bot.ready.then(() => applyTint(bot.group, 0x55dd55)) }
       if (bot.ready) ready.push(bot.ready)
       this.bots.push(bot)
     }
@@ -948,6 +1005,7 @@ export class Game {
 
   async start(mode = 'coop') {
     this.audio.resume()
+    this.audio.stopMusic()
     this.onlineMode = null // solo
     this.soloMode = mode
     this.brMode = mode === 'br'
@@ -986,6 +1044,7 @@ export class Game {
   // (bot modes spawn CPUs to fill; PvP modes wait for humans).
   startOnline(modeOverride) {
     this.audio.resume()
+    this.audio.stopMusic()
     const status = document.getElementById('mp-status')
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
     const roomName = (document.getElementById('mp-room').value || 'lobby').trim()
@@ -1046,9 +1105,11 @@ export class Game {
         },
         onState: (id, p) => this.remotePlayers.get(id)?.setState(p),
         onShoot: (id, from, to) => {
-          if (from && to) this.weapons.beam(
-            new THREE.Vector3(from[0], from[1], from[2]),
-            new THREE.Vector3(to[0], to[1], to[2]), 0x9ad0ff, 0.06)
+          if (from && to) {
+            const a = new THREE.Vector3(from[0], from[1], from[2])
+            this.weapons.beam(a, new THREE.Vector3(to[0], to[1], to[2]), 0x9ad0ff, 0.06)
+            this.weapons.flash(a, 0xffd24a) // muzzle flash at the shooter
+          }
         },
         onHit: (fromId, dmg) => {
           if (!this.player.alive) return
@@ -1430,6 +1491,7 @@ export class Game {
         if (res.tool === 'grapple') { this._fireGrapple() }
         // Floating damage number (white, gold on headshot).
         if (res.dmg > 0 && res.hitPos) this._damageNumber(res.hitPos, Math.round(res.dmg), res.headshot)
+        if (res.headshot) this.audio.headshot()
         if (res.killed) { this.hud.hitMarker(res.headshot ? 'kill' : true); this.audio.kill(); this._playerKill() }
         else if (res.hit) { this.hud.hitMarker(res.headshot); this.audio.hit() }
         if (res.playerHit != null && this.net) {
@@ -1469,6 +1531,11 @@ export class Game {
 
     if (this.driving) this._driveUpdate(dt)
     else this.player.update(dt)
+    // Footstep sounds while moving on the ground.
+    if (!this.driving && this.player.moving && this.player.onGround && this.player.alive) {
+      this._stepCd = (this._stepCd || 0) - dt
+      if (this._stepCd <= 0) { this.audio.footstep(); this._stepCd = this.player.sprinting ? 0.27 : 0.4 }
+    }
     // Screen shake (explosions / taking damage).
     if (this._shake > 0.01) {
       this.camera.position.x += (Math.random() - 0.5) * this._shake
@@ -1521,13 +1588,17 @@ export class Game {
       } else if (cfg.jugg) {
         if (this.jugg && !this.jugg.alive) { this._matchOver = true; this._winMatch('JUGGERNAUT DOWN', 'You took down the juggernaut!') }
       } else if (cfg.infect) {
+        this._matchT = (this._matchT || 0) + dt
         const humanBots = this.bots.filter((b) => b.alive && b.role === 'fighter').length
         const zombies = this.bots.filter((b) => b.alive && b.role === 'zombie').length + (this.playerZombie ? 1 : 0)
         const humans = humanBots + (this.playerZombie ? 0 : 1)
         this.hud.setStormTimer(`🧟 INFECTION   Survivors: ${humans}   Zombies: ${zombies}`)
-        if (zombies === 0) { this._matchOver = true; this._winMatch('SURVIVORS WIN', 'Every zombie was eliminated!', !this.playerZombie) }
-        else if (humans === 0) { this._matchOver = true; this._winMatch('INFECTION COMPLETE', 'Everyone was turned.', false) }
-        else if (humans === 1) { this._matchOver = true; const won = !this.playerZombie; this._winMatch(won ? 'LAST SURVIVOR' : 'INFECTED', won ? 'You were the last one standing!' : 'A survivor outlasted you.', won) }
+        // Grace period so the match can't resolve before everyone has spawned in.
+        if (this._matchT > 4) {
+          if (zombies === 0) { this._matchOver = true; this._winMatch('SURVIVORS WIN', 'Every zombie was eliminated!', !this.playerZombie) }
+          else if (humans === 0) { this._matchOver = true; this._winMatch('INFECTION COMPLETE', 'Everyone was turned.', false) }
+          else if (humans === 1) { this._matchOver = true; const won = !this.playerZombie; this._winMatch(won ? 'LAST SURVIVOR' : 'INFECTED', won ? 'You were the last one standing!' : 'A survivor outlasted you.', won) }
+        }
       }
     }
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 import { skinOf, applyTint } from '../core/skins.js'
+import { WEAPONS } from '../systems/Weapons.js'
 
 // A networked other-player avatar: the animated kit character with a name tag and
 // HP bar, smoothly interpolated toward the latest networked state.
@@ -13,6 +14,8 @@ export class RemotePlayer {
     this.id = id
     this.skin = null
     this._skinLoading = null
+    this.wpn = null
+    this._wpnLoading = null
     this.group = new THREE.Group()
     this.targetHeight = 1.8
 
@@ -95,9 +98,30 @@ export class RemotePlayer {
     this.teamRing.material.color.set(relation === 'ally' ? 0x4ade80 : 0xff5555)
   }
 
+  // Show the gun this peer is holding (parented to the body so it turns with them).
+  setHeldWeapon(index) {
+    const def = WEAPONS[index]
+    if (!def || this._wpnLoading === index) return
+    this._wpnLoading = index
+    this.assets.loadModel(`models/guns/${def.model}.gltf`).then((m) => {
+      if (!m || this._wpnLoading !== index) return
+      this.wpn = index
+      if (this.heldGun) { this.modelPivot.remove(this.heldGun) }
+      const g = m.scene
+      g.traverse((o) => { if (o.isMesh) o.frustumCulled = false })
+      const box = new THREE.Box3().setFromObject(g); const sz = new THREE.Vector3(); box.getSize(sz)
+      g.scale.setScalar(0.7 / (Math.max(sz.x, sz.y, sz.z) || 1))
+      g.position.set(0.32, 1.25, 0.35)
+      g.rotation.y = -Math.PI / 2
+      this.heldGun = g
+      this.modelPivot.add(g)
+    })
+  }
+
   setState(p) {
     if (!p) return
     if (p.skin && p.skin !== this.skin) this.setSkin(p.skin)
+    if (p.wpn != null && p.wpn !== this.wpn) this.setHeldWeapon(p.wpn)
     this.target.set(p.x, p.y, p.z)
     // First state: snap above the real spot so the drop-in starts there, not at origin.
     if (!this._gotState) {

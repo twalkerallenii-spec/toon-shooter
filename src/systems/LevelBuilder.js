@@ -27,6 +27,8 @@ export class LevelBuilder {
     if (mapKey === 'royale') return this.buildRoyale()
     if (mapKey === 'outpost') return this.buildOutpost()
     if (mapKey === 'rooftops') return this.buildRooftops()
+    if (mapKey === 'compound') return this.buildCompound()
+    if (mapKey === 'ruins') return this.buildRuins()
     return this.buildArena()
   }
 
@@ -322,6 +324,64 @@ export class LevelBuilder {
       jobs.push(this.place('ExplodingBarrel', { x: (rng() - 0.5) * HALF * 1.3, z: (rng() - 0.5) * HALF * 1.3, solid: true, radiusMul: 0.9, barrel: true }))
     }
     jobs.push(this._detail(HALF, 303))
+    await Promise.all(jobs)
+  }
+
+  // COMPOUND: a central fortress ring of buildings + container corridors.
+  async buildCompound() {
+    const HALF = this.world.arenaRadius
+    const S = (v) => v * (HALF / 42)
+    const rng = mulberry32(9182)
+    const TAU = Math.PI * 2
+    const jobs = [this._perimeter(1.8)]
+    const baseZ = HALF - 13
+    this.world.addBase('red', 0, -baseZ); this.world.addBase('blue', 0, baseZ)
+    jobs.push(this._base(0, -baseZ, rng), this._base(0, baseZ, rng))
+
+    const struct = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * TAU, r = S(14)
+      jobs.push(this.place(struct[i % 4], { x: Math.cos(ang) * r, z: Math.sin(ang) * r, rotY: ang + Math.PI, solid: true, radiusMul: 0.7 }))
+    }
+    for (let i = 0; i < 6; i++) jobs.push(this.place('Container_Long', { x: S(-20) + i * S(8), z: S(-4), rotY: 0, solid: true, climbable: true }))
+    for (let i = 0; i < 6; i++) jobs.push(this.place('Container_Long', { x: S(-20) + i * S(8), z: S(8), rotY: 0, solid: true, climbable: true }))
+    for (let i = 0; i < 26; i++) {
+      const ang = rng() * TAU, r = HALF * (0.25 + rng() * 0.55)
+      jobs.push(this.place(i % 2 ? 'Crate' : 'SackTrench', { x: Math.cos(ang) * r, z: Math.sin(ang) * r, rotY: rng() * TAU, solid: true }))
+    }
+    for (let i = 0; i < 10; i++) jobs.push(this.place('ExplodingBarrel', { x: (rng() - 0.5) * HALF * 1.4, z: (rng() - 0.5) * HALF * 1.4, solid: true, radiusMul: 0.9, barrel: true }))
+    jobs.push(this._detail(HALF, 511))
+    await Promise.all(jobs)
+  }
+
+  // RUINS: scattered big structures + heavy debris fields, wide open lanes.
+  async buildRuins() {
+    const HALF = this.world.arenaRadius
+    const S = (v) => v * (HALF / 42)
+    const rng = mulberry32(33312)
+    const TAU = Math.PI * 2
+    const jobs = [this._perimeter(1.8)]
+    const baseZ = HALF - 13
+    this.world.addBase('red', 0, -baseZ); this.world.addBase('blue', 0, baseZ)
+    jobs.push(this._base(0, -baseZ, rng), this._base(0, baseZ, rng))
+
+    const struct = ['Structure_1', 'Structure_2', 'Structure_3', 'Structure_4']
+    const spots = [[-S(22), -S(20)], [S(24), -S(14)], [-S(18), S(22)], [S(20), S(20)], [0, -S(28)], [0, S(28)], [-S(30), 0], [S(30), 0]]
+    spots.forEach((p, i) => jobs.push(this.place(struct[i % 4], { x: p[0], z: p[1], rotY: rng() * TAU, solid: true, radiusMul: 0.75 })))
+    jobs.push(this.place('Tank', { x: S(-10), z: S(6), rotY: 1, solid: true, radiusMul: 0.7 }))
+    jobs.push(this.place('Debris_BrokenCar', { x: S(12), z: S(-8), rotY: -0.6, solid: true, radiusMul: 0.7 }))
+    const deb = ['Debris_Pile', 'Debris_Tires', 'Pipes', 'WoodPlanks', 'Pallet_Broken', 'Barrier_Large', 'TrashContainer']
+    for (let i = 0; i < 42; i++) {
+      const ang = rng() * TAU, r = HALF * (0.15 + rng() * 0.7)
+      jobs.push(this.place(deb[i % deb.length], { x: Math.cos(ang) * r, z: Math.sin(ang) * r, rotY: rng() * TAU, solid: rng() < 0.6 }))
+    }
+    for (let i = 0; i < 12; i++) jobs.push(this.place('ExplodingBarrel_Spilled', { x: (rng() - 0.5) * HALF * 1.6, z: (rng() - 0.5) * HALF * 1.6, solid: true, radiusMul: 0.9, barrel: true }))
+    const trees = ['Tree_1', 'Tree_2', 'Tree_3', 'Tree_4']
+    for (let i = 0; i < 30; i++) {
+      const ang = (i / 30) * TAU + rng() * 0.3, edge = HALF - 4 - rng() * 10
+      jobs.push(this.place(trees[i % 4], { x: Math.cos(ang) * edge, z: Math.sin(ang) * edge, rotY: rng() * TAU, solid: true, radiusMul: 0.35 }))
+    }
+    jobs.push(this._detail(HALF, 733))
     await Promise.all(jobs)
   }
 

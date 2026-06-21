@@ -65,6 +65,8 @@
         <button class="vote-opt" data-map="arena">Arena <span data-c="arena">0</span></button>
         <button class="vote-opt" data-map="outpost">Outpost <span data-c="outpost">0</span></button>
         <button class="vote-opt" data-map="rooftops">Rooftops <span data-c="rooftops">0</span></button>
+        <button class="vote-opt" data-map="compound">Compound <span data-c="compound">0</span></button>
+        <button class="vote-opt" data-map="ruins">Ruins <span data-c="ruins">0</span></button>
       </div>
 
       <div id="ads-vignette"></div>
@@ -98,7 +100,7 @@
           <span class="top-tab" data-panel="locker">LOCKER</span>
           <span class="top-tab" data-panel="store">STORE</span>
         </div>
-        <div class="player-chip"><span class="vbuck">◆</span> 1,250</div>
+        <div class="player-chip"><span class="vbuck">◆</span> <span id="coin-count">0</span></div>
       </div>
 
       <!-- Left matchmaking card (PLAY panel) -->
@@ -128,6 +130,8 @@
               <button class="map-btn active" data-map="arena">Arena</button>
               <button class="map-btn" data-map="outpost">Outpost</button>
               <button class="map-btn" data-map="rooftops">Rooftops</button>
+              <button class="map-btn" data-map="compound">Compound</button>
+              <button class="map-btn" data-map="ruins">Ruins</button>
             </div>
           </div>
           <div class="settings">
@@ -174,15 +178,8 @@
       <!-- STORE panel -->
       <div class="lobby-card panel-store hidden">
         <div class="mm-label">ITEM SHOP</div>
-        <div class="char-grid">
-          <button class="char-card owned"><span class="cc-ico">🪖</span>Soldier<small>OWNED</small></button>
-          <button class="char-card owned"><span class="cc-ico">☣️</span>Hazmat<small>OWNED</small></button>
-          <button class="char-card owned"><span class="cc-ico">👽</span>Enemy<small>OWNED</small></button>
-          <button class="char-card locked"><span class="cc-ico">🥷</span>Ninja<small>SOON</small></button>
-          <button class="char-card locked"><span class="cc-ico">🤖</span>Robot<small>SOON</small></button>
-          <button class="char-card locked"><span class="cc-ico">🎃</span>Pumpkin<small>SOON</small></button>
-        </div>
-        <p class="locker-note">More skins coming. Everything's free — grab them in the Locker.</p>
+        <div class="char-grid" id="store-grid"></div>
+        <p class="locker-note">Earn ◆ from matches (kills + wins), then unlock skins here.</p>
       </div>
 
       <!-- Player card (top-right) -->
