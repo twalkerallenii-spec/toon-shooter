@@ -261,7 +261,11 @@ export class Game {
       // Enter opens chat.
       if (e.code === 'Enter' && this.state === STATE.PLAYING && !this._chatOpen && !e.repeat) { e.preventDefault(); this._openChat() }
       // M toggles proximity voice (the 🎤 button can't be clicked while aiming).
-      if (e.code === 'KeyM' && this.state === STATE.PLAYING && !e.repeat) this._toggleVoice()    })
+      if (e.code === 'KeyM' && this.state === STATE.PLAYING && !e.repeat) this._toggleVoice()
+      // Q = ping a location, T = spray a tag on the surface you're aiming at.
+      if (e.code === 'KeyQ' && this.state === STATE.PLAYING && !e.repeat) this._placePing()
+      if (e.code === 'KeyT' && this.state === STATE.PLAYING && !e.repeat) this._placeSpray()
+    })
 
     // Mobile RANK button (toggle).
     const rankBtn = document.getElementById('rank-btn')
@@ -699,6 +703,7 @@ export class Game {
     this._shake = 0
     this._streak = 0; this._lastKillT = -99; this._matchT = 0
     this.kills = 0; this._recorded = false // stats recorded once per match
+    this._fx = [] // pings/sprays (old ones die with the rebuilt scene)
     this.pickups.onPickup = (type, wi) => {
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
         : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
@@ -1338,6 +1343,7 @@ export class Game {
           this.hud.addChat(name, text, { self: id === this.net?.id, near })
         },
         onPresence: (list) => this._renderOnline(list),
+        onFx: (id, name, fx) => this._onFx(name, fx),
         onAdmin: (v) => { this.isAdmin = v },
         onKicked: (reason) => this._onKicked(reason),
         onHit: (fromId, dmg) => {
@@ -1867,6 +1873,7 @@ export class Game {
     }
 
     this.particles.update(dt)
+    this._updateFx(dt)
     this.pickups.update(dt, this.player, this.weapons)
 
     // Grenades.
@@ -2051,6 +2058,93 @@ export class Game {
       },
     }
     this.grenades.push(blast)
+  }
+
+  // ---- Pings & Sprays ----
+  _fxRaycast() {
+    const aim = this.player.getAimRay()
+    this._fxRay = this._fxRay || new THREE.Raycaster()
+    this._fxRay.set(aim.origin, aim.dir); this._fxRay.far = 300
+    const hits = this._fxRay.intersectObjects(this.world.obstacles.map((o) => o.mesh), true)
+    if (hits.length) return { point: hits[0].point.clone(), normal: hits[0].face ? hits[0].face.normal.clone() : new THREE.Vector3(0, 1, 0) }
+    return { point: aim.origin.clone().addScaledVector(aim.dir, 40).setY(0.6), normal: new THREE.Vector3(0, 1, 0) }
+  }
+
+  _placePing() {
+    const { point } = this._fxRaycast()
+    this._spawnPing(point, '📍')
+    this.audio?.pickup?.()
+    this.hud.addKillFeed('📍 Pinged a location')
+    this.net?.sendFx({ kind: 'ping', x: point.x, y: point.y, z: point.z })
+  }
+
+  _placeSpray() {
+    if (this._sprayCd && performance.now() < this._sprayCd) return
+    this._sprayCd = performance.now() + 600
+    const SPRAYS = ['😎', '💀', '🔥', '👾', '⭐', '🎯', '😂', '🤖']
+    const e = SPRAYS[Math.floor(Math.random() * SPRAYS.length)]
+    const { point, normal } = this._fxRaycast()
+    this._spawnSpray(point, normal, e)
+    this.net?.sendFx({ kind: 'spray', x: point.x, y: point.y, z: point.z, nx: normal.x, ny: normal.y, nz: normal.z, e })
+  }
+
+  _onFx(name, fx) {
+    if (!fx) return
+    if (fx.kind === 'ping') this._spawnPing(new THREE.Vector3(fx.x, fx.y, fx.z), '📍', name)
+    else if (fx.kind === 'spray') this._spawnSpray(new THREE.Vector3(fx.x, fx.y, fx.z), new THREE.Vector3(fx.nx, fx.ny, fx.nz), fx.e)
+  }
+
+  _emojiTexture(emoji, px = 128) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = px
+    const ctx = cv.getContext('2d')
+    ctx.font = `${px * 0.8}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText(emoji, px / 2, px / 2 + px * 0.05)
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t
+  }
+
+  _spawnPing(pos, emoji, name) {
+    const grp = new THREE.Group(); grp.position.copy(pos)
+    const dia = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), new THREE.MeshBasicMaterial({ color: 0x6cf0ff, depthTest: false, transparent: true }))
+    dia.renderOrder = 998; dia.position.y = 2.4
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this._emojiTexture(emoji), depthTest: false, transparent: true }))
+    spr.scale.set(1.4, 1.4, 1); spr.position.y = 3.6; spr.renderOrder = 999
+    grp.add(dia, spr)
+    this.world.scene.add(grp)
+    this.particles?.emit(pos, 16, { color: [0.4, 0.9, 1], speed: 5, spread: 2, size: 1.2, life: 0.5, up: 3 })
+    this._fx = this._fx || []
+    this._fx.push({ grp, life: 8, kind: 'ping', _t: 0 })
+  }
+
+  _spawnSpray(pos, normal, emoji) {
+    const n = normal.lengthSq() > 0.001 ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0)
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.6, 1.6),
+      new THREE.MeshBasicMaterial({ map: this._emojiTexture(emoji), transparent: true, depthWrite: false })
+    )
+    plane.position.copy(pos).addScaledVector(n, 0.06)
+    plane.lookAt(plane.position.clone().add(n))
+    this.world.scene.add(plane)
+    this._fx = this._fx || []
+    this._fx.push({ grp: plane, life: 22, kind: 'spray', _t: 0, mat: plane.material })
+  }
+
+  _updateFx(dt) {
+    if (!this._fx || !this._fx.length) return
+    for (let i = this._fx.length - 1; i >= 0; i--) {
+      const f = this._fx[i]; f.life -= dt; f._t += dt
+      if (f.kind === 'ping') {
+        f.grp.children[0].rotation.y += dt * 2
+        f.grp.children[0].position.y = 2.4 + Math.sin(f._t * 3) * 0.18
+        if (f.grp.children[1]) f.grp.children[1].quaternion.copy(this.camera.quaternion)
+      } else if (f.kind === 'spray' && f.life < 3) {
+        f.mat.opacity = Math.max(0, f.life / 3)
+      }
+      if (f.life <= 0) {
+        this.world.scene.remove(f.grp)
+        f.grp.traverse?.((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() })
+        this._fx.splice(i, 1)
+      }
+    }
   }
 
   throwGrenade() {

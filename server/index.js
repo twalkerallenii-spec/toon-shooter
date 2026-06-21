@@ -221,6 +221,9 @@ wss.on('connection', (ws) => {
       case 'vote':
         handleVote(room, ws.id, msg.map)
         break
+      case 'fx': // pings / sprays — relay verbatim to the rest of the room
+        broadcast(room, { t: 'fx', id: ws.id, name: me?.name, fx: msg.fx }, ws.id)
+        break
       case 'chat': {
         const text = String(msg.text || '').slice(0, 140)
         if (!text) break

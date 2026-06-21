@@ -53,6 +53,7 @@ export class Net {
       case 'win': this.handlers.onWin?.(msg); break
       case 'chat': this.handlers.onChat?.(msg.id, msg.name, msg.text, msg.p); break
       case 'presence': this.handlers.onPresence?.(msg.list); break
+      case 'fx': this.handlers.onFx?.(msg.id, msg.name, msg.fx); break
       case 'kicked': this.handlers.onKicked?.(msg.reason); break
       case 'admin': this.handlers.onAdmin?.(msg.value); break
       case 'rtc': this.handlers.onRtc?.(msg.from, msg.data); break
@@ -85,6 +86,10 @@ export class Net {
 
   sendChat(text) {
     if (this.connected) this._send({ t: 'chat', text })
+  }
+
+  sendFx(fx) {
+    if (this.connected) this._send({ t: 'fx', fx })
   }
 
   sendRtc(to, data) {
