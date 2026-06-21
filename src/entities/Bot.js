@@ -105,7 +105,7 @@ export class Bot {
       const d = seeker ? Math.hypot(seeker.position.x - p2.x, seeker.position.z - p2.z) : 999
       if (seeker && d < 38) {
         TMP.set(p2.x - seeker.position.x, 0, p2.z - seeker.position.z).normalize()
-        this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI
+        this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
         p2.addScaledVector(TMP, this.speed * 1.15 * dt); moving = true
       } else {
         this._wanderCd -= dt
@@ -115,7 +115,7 @@ export class Bot {
           this._wanderCd = 2 + Math.random() * 3
         }
         TMP.subVectors(this._wander, p2); TMP.y = 0
-        if (TMP.lengthSq() > 1) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI; p2.addScaledVector(TMP, this.speed * 0.5 * dt); moving = true }
+        if (TMP.lengthSq() > 1) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z); p2.addScaledVector(TMP, this.speed * 0.5 * dt); moving = true }
       }
       this._wall -= dt
       if (this.world.cityCollider) {
@@ -142,7 +142,7 @@ export class Bot {
       let moving = false
       if (tgt) {
         TMP.subVectors(tgt.position, p3); TMP.y = 0; const dist = TMP.length(); TMP.normalize()
-        this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI
+        this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
         if (dist > 1.9) { p3.addScaledVector(TMP, this.speed * 1.35 * dt); moving = true }
         else { this.shootCd -= dt; if (this.shootCd <= 0) { this.shootCd = 0.9; tgt.applyDamage?.(11, this); this.animator?.playOnceThen?.('Punch', 'Idle') } }
       }
@@ -158,7 +158,7 @@ export class Bot {
       const pc = this.group.position
       TMP.set(this.forceGoal.x - pc.x, 0, this.forceGoal.z - pc.z)
       let mv = false
-      if (TMP.lengthSq() > 0.5) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI; pc.addScaledVector(TMP, this.speed * 1.05 * dt); mv = true }
+      if (TMP.lengthSq() > 0.5) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z); pc.addScaledVector(TMP, this.speed * 1.05 * dt); mv = true }
       this._wall -= dt
       if (this.world.cityCollider) {
         if (this._wall <= 0) { this.world.cityCollider.pushOut(pc, 0.6, 1.0); this._wall = 0.15 }
@@ -185,7 +185,7 @@ export class Bot {
     if (target) {
       TMP.subVectors(target.position, p); TMP.y = 0
       const dist = TMP.length(); TMP.normalize()
-      this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI
+      this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
       if (dist > this.shootRange * 0.8) {
         p.addScaledVector(TMP, this.speed * dt); moving = true // close in
       } else {
@@ -205,7 +205,7 @@ export class Bot {
     } else if (this.objective) {
       // CTF: advance toward the assigned objective (a flag/base) when not fighting.
       TMP.set(this.objective.x - p.x, 0, this.objective.z - p.z)
-      if (TMP.lengthSq() > 1) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI; p.addScaledVector(TMP, this.speed * 0.85 * dt); moving = true }
+      if (TMP.lengthSq() > 1) { TMP.normalize(); this.group.rotation.y = Math.atan2(TMP.x, TMP.z); p.addScaledVector(TMP, this.speed * 0.85 * dt); moving = true }
     } else {
       // Wander.
       this._wanderCd -= dt
@@ -215,7 +215,7 @@ export class Bot {
         this._wanderCd = 3 + Math.random() * 3
       }
       TMP.subVectors(this._wander, p); TMP.y = 0; TMP.normalize()
-      this.group.rotation.y = Math.atan2(TMP.x, TMP.z) + Math.PI
+      this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
       p.addScaledVector(TMP, this.speed * 0.6 * dt); moving = true
     }
 

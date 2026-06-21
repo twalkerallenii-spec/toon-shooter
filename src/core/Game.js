@@ -704,6 +704,7 @@ export class Game {
     this._streak = 0; this._lastKillT = -99; this._matchT = 0
     this.kills = 0; this._recorded = false // stats recorded once per match
     this._fx = [] // pings/sprays (old ones die with the rebuilt scene)
+    this._supplyTimer = 38 // BR supply-drop countdown
     this.pickups.onPickup = (type, wi) => {
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
         : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
@@ -799,13 +800,16 @@ export class Game {
         this.pickups.spawn(type, Math.cos(a) * r, Math.sin(a) * r)
       }
     }
+    // Loot chests can drop any weapon — give Pickups the weapon table.
+    this.pickups.weaponDefs = this.weapons.defs
+    const chests = (n) => { for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * (HALF - 16); this.pickups.spawnChest(Math.cos(a) * r, Math.sin(a) * r) } }
     // Every mode scatters weapon loot now (all guns are pickups).
     if (this.brMode) {
       this.pickups.scatterWeapons(this.weapons.defs, 22, HALF)
-      drop('shield', 7); drop('health', 7); drop('ammo', 6)
+      drop('shield', 7); drop('health', 7); drop('ammo', 6); chests(12)
     } else {
       this.pickups.scatterWeapons(this.weapons.defs, 16, HALF)
-      drop('health', 6); drop('shield', 5); drop('ammo', 6)
+      drop('health', 6); drop('shield', 5); drop('ammo', 6); chests(7)
     }
 
     // CPU players fill the match (online or offline) for bot modes.
@@ -1924,6 +1928,14 @@ export class Game {
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))
       this.hud.setStormTimer(this.zone.statusText())
+      // Periodic supply drops: a chest parachutes into the current safe zone.
+      this._supplyTimer = (this._supplyTimer ?? 38) - dt
+      if (this._supplyTimer <= 0) {
+        this._supplyTimer = 42
+        const a = Math.random() * Math.PI * 2, r = Math.random() * this.zone.radius * 0.7
+        this.pickups.spawnChest(this.zone.cx + Math.cos(a) * r, this.zone.cz + Math.sin(a) * r, true)
+        this.hud.addKillFeed('📦 Supply drop incoming!')
+      }
       // Bots flee the storm: run to the safe-zone centre near/over the edge, and
       // take storm damage if caught outside (so they don't camp the storm).
       const Z = this.zone

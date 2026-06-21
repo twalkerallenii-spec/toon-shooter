@@ -10,16 +10,20 @@ export class Pickups {
     this.items = [] // { group, type, x, z, t }
   }
 
-  // type: 'health' | 'ammo' | 'shield'
+  // type: 'health' | 'medkit' | 'ammo' | 'shield' | 'bigshield'
   spawn(type, x, z) {
-    const model = type === 'health' ? 'Health' : type === 'shield' ? 'GasTank' : 'GasCan'
+    const MODELS = { health: 'Health', medkit: 'Health', shield: 'GasTank', bigshield: 'GasTank', ammo: 'GasCan' }
+    const COLS = {
+      health: [0x4ade80, 0x2a8a4a], medkit: [0xff5a8a, 0x9a2a4a],
+      shield: [0x3da9fc, 0x2176c4], bigshield: [0xb06aff, 0x6a2ac4], ammo: [0xffcb3d, 0xb8901f],
+    }
+    const model = MODELS[type] || 'GasCan'
     const group = new THREE.Group()
     group.position.set(x, 0, z)
     this.world.scene.add(group)
 
     // Glow base ring so pickups are easy to spot.
-    const col = type === 'health' ? 0x4ade80 : type === 'shield' ? 0x3da9fc : 0xffcb3d
-    const emi = type === 'health' ? 0x2a8a4a : type === 'shield' ? 0x2176c4 : 0xb8901f
+    const [col, emi] = COLS[type] || [0xffcb3d, 0xb8901f]
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.42, 0.05, 8, 24),
       new THREE.MeshStandardMaterial({ color: col, emissive: emi, emissiveIntensity: 1 })
@@ -71,6 +75,54 @@ export class Pickups {
     })
   }
 
+  // A loot chest. fall=true makes it parachute down (supply drop). Walk up to it
+  // to open → it bursts into a weapon + a couple of consumables.
+  spawnChest(x, z, fall = false) {
+    const group = new THREE.Group()
+    group.position.set(x, fall ? 34 : 0, z)
+    this.world.scene.add(group)
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.8, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0xffcb3d, emissive: 0xb8901f, emissiveIntensity: 0.55, metalness: 0.45, roughness: 0.4 })
+    )
+    box.position.y = 0.5; box.castShadow = true; group.add(box)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.06, 8, 24), new THREE.MeshStandardMaterial({ color: 0xffe07a, emissive: 0xffb000, emissiveIntensity: 1 }))
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.06; group.add(ring)
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this._iconTex('🎁'), transparent: true, depthWrite: false }))
+    spr.scale.set(1.0, 1.0, 1); spr.position.y = 1.6; group.add(spr)
+    let chute = null
+    if (fall) {
+      chute = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1.8, 14, 1, true), new THREE.MeshStandardMaterial({ color: 0xff5a5a, emissive: 0x551515, side: THREE.DoubleSide, roughness: 0.7 }))
+      chute.position.y = 3.2; group.add(chute)
+    }
+    this.items.push({ group, type: 'chest', x, z, t: Math.random() * 6, fall, chute, ring })
+  }
+
+  _iconTex(ch) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 96
+    const c = cv.getContext('2d'); c.font = '74px serif'; c.textAlign = 'center'; c.textBaseline = 'middle'
+    c.fillText(ch, 48, 52)
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t
+  }
+
+  _openChest(it) {
+    const x = it.group.position.x, z = it.group.position.z
+    this.audio?.pickup?.()
+    // A weapon + 2 consumables scattered around the chest.
+    if (this.weaponDefs) {
+      const pick = this.weaponDefs.map((d, i) => ({ index: i, model: d.model, key: d.key, secret: d.secret })).filter((d) => d.key !== 'Zip' && !d.secret)
+      const d = pick[Math.floor(Math.random() * pick.length)]
+      this.spawnWeapon(d, x + (Math.random() - 0.5) * 2, z + (Math.random() - 0.5) * 2)
+    }
+    const cons = ['shield', 'health', 'medkit', 'bigshield', 'ammo']
+    for (let k = 0; k < 2; k++) {
+      const t = cons[Math.floor(Math.random() * cons.length)]
+      const a = Math.random() * Math.PI * 2
+      this.spawn(t, x + Math.cos(a) * 1.7, z + Math.sin(a) * 1.7)
+    }
+    this.onPickup?.('chest')
+  }
+
   // Scatter weapon loot across the map (Battle Royale).
   scatterWeapons(defs, count, half) {
     const pickable = defs.map((d, i) => ({ index: i, model: d.model, key: d.key, secret: d.secret })).filter((d) => d.key !== 'Zip' && !d.secret)
@@ -92,6 +144,23 @@ export class Pickups {
   update(dt, player, weapons) {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i]
+      // Loot chests (incl. parachuting supply drops).
+      if (it.type === 'chest') {
+        it.t += dt
+        it.ring.rotation.z += dt * 1.2
+        if (it.fall) {
+          it.group.position.y = Math.max(0, it.group.position.y - 7 * dt)
+          it.group.rotation.y += dt * 0.5
+          if (it.group.position.y <= 0.02) { it.fall = false; if (it.chute) { it.group.remove(it.chute); it.chute.geometry.dispose(); it.chute.material.dispose(); it.chute = null } this.audio?.pickup?.() }
+          continue
+        }
+        it.group.position.y = Math.sin(it.t * 2) * 0.1
+        it.group.rotation.y += dt * 0.7
+        if (player.alive && Math.hypot(player.position.x - it.x, player.position.z - it.z) < 2.4) {
+          this._openChest(it); this._remove(i)
+        }
+        continue
+      }
       it.t += dt
       const bob = Math.sin(it.t * 2) * 0.15
       if (it.spin) { it.spin.rotation.y += dt * 1.6; it.spin.position.y = bob }
@@ -106,8 +175,12 @@ export class Pickups {
           weapons.ammoByWeapon = weapons.defs.map((wd) => wd.mag); took = true
         } else if (it.type === 'weapon') {
           weapons.give(it.wIndex); took = true
+        } else if (it.type === 'medkit' && player.hp < player.maxHp) {
+          player.hp = player.maxHp; took = true // full heal
         } else if (it.type === 'shield' && player.shield < 100) {
           player.shield = Math.min(100, player.shield + 50); took = true
+        } else if (it.type === 'bigshield' && player.shield < 100) {
+          player.shield = 100; took = true // full shield
         }
         if (took) {
           this.audio?.pickup()
