@@ -135,6 +135,26 @@ export class HUD {
     document.getElementById('zombie-tint')?.classList.toggle('on', !!on)
   }
 
+  // Live player count (online matches).
+  setPlayerCount(n) {
+    const el = document.getElementById('player-count')
+    const num = document.getElementById('pc-num')
+    if (!el || !num) return
+    if (n == null) { el.classList.add('hidden'); return }
+    num.textContent = n
+    el.classList.remove('hidden')
+  }
+
+  // Big center "ELIMINATED" banner on a kill.
+  showKillBanner(text) {
+    const el = document.getElementById('kill-banner')
+    if (!el) return
+    el.textContent = text
+    el.classList.remove('hidden', 'show')
+    void el.offsetWidth // restart the animation
+    el.classList.add('show')
+  }
+
   // ---- Live chat ----------------------------------------------------------
   addChat(name, text, { self = false, near = true } = {}) {
     if (!this.el.chatLog) return

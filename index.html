@@ -38,7 +38,9 @@
       <div id="hud-top-right">
         <div class="stat-num"><span class="label">SCORE</span> <span id="score">0</span></div>
         <div class="stat-num"><span class="label">WAVE</span> <span id="wave">1</span></div>
+        <div id="player-count" class="hidden">👥 <span id="pc-num">1</span> online</div>
       </div>
+      <div id="kill-banner" class="hidden"></div>
       <div id="hud-bottom-right">
         <div id="weapon-name">AK</div>
         <span id="ammo">30</span><span class="ammo-sep">/</span><span id="ammo-max">30</span>
@@ -120,6 +122,7 @@
         </div>
         <button id="start-btn" class="big-btn">START MATCH</button>
         <button id="br-btn" class="alt-btn">☢ SOLO BATTLE ROYALE</button>
+        <button id="invite-btn" class="alt-btn">🔗 COPY INVITE LINK</button>
 
         <details class="lobby-extra">
           <summary>ONLINE &amp; SETTINGS</summary>
@@ -270,6 +273,8 @@
           <span class="ev-ico">🛡️</span><span class="ev-name">Juggernaut</span></button>
         <button class="event-tile mode-btn" data-mode="infect" style="--ev:#7CFF5A">
           <span class="ev-new">NEW</span><span class="ev-ico">🧟</span><span class="ev-name">Infection</span></button>
+        <button class="event-tile mode-btn" data-mode="koth" style="--ev:#ffd24a">
+          <span class="ev-new">NEW</span><span class="ev-ico">👑</span><span class="ev-name">King of the Hill</span></button>
       </div>
     </div>
 

@@ -42,6 +42,7 @@ const SOLO_MODES = {
   oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0, map: 'arena' },
   jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
   infect: { label: 'INFECTION', infect: true, bots: 9, startZombies: 3, map: 'outpost' },
+  koth: { label: 'KING OF THE HILL', koth: true, bots: 7, role: 'fighter', map: 'arena' },
 }
 
 export class Game {
@@ -129,6 +130,31 @@ export class Game {
     document.getElementById('br-btn').addEventListener('click', () => {
       if (this.state === STATE.MENU || this.state === STATE.DEAD) this.startOnline('br')
     })
+
+    // Invite links: copy a ?room=&mode= URL that drops a friend into your match.
+    document.getElementById('invite-btn')?.addEventListener('click', () => {
+      const room = (document.getElementById('mp-room').value || 'lobby').trim()
+      const mode = document.querySelector('.event-tile.active')?.dataset.mode || 'coop'
+      const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(room)}&mode=${encodeURIComponent(mode)}`
+      const btn = document.getElementById('invite-btn'); const orig = btn.textContent
+      const done = () => { btn.textContent = '✓ LINK COPIED!'; setTimeout(() => (btn.textContent = orig), 1600) }
+      navigator.clipboard?.writeText(url).then(done).catch(() => window.prompt('Copy this invite link:', url))
+    })
+
+    // Joining via an invite link: prefill room + select the mode tile.
+    const invRoom = params.get('room'), invMode = params.get('mode')
+    if (invRoom) document.getElementById('mp-room').value = invRoom.slice(0, 24)
+    if (invMode) {
+      const tile = document.querySelector(`.event-tile[data-mode="${invMode}"]`)
+      if (tile) {
+        document.querySelectorAll('.event-tile').forEach((t) => t.classList.remove('active'))
+        tile.classList.add('active'); this._updateLobbyCard(invMode)
+      }
+    }
+    if (invRoom || invMode) {
+      const om = document.getElementById('overlay-msg')
+      if (om) om.textContent = `Invited to "${invRoom || 'lobby'}" — press START to join!`
+    }
 
     // Map voting (online): toggle panel + cast vote.
     this.hud.el.voteToggle.addEventListener('click', () => this.hud.toggleVotePanel())
@@ -292,7 +318,8 @@ export class Game {
       gungame: ['GUN GAME', 'Every kill upgrades your weapon. Master all to win.'],
       oitc: ['ONE IN THE CHAMBER', 'Everyone has 1 HP. One shot, one kill.'],
       jugg: ['JUGGERNAUT', 'Take down the giant juggernaut bot.'],
-      infect: ['INFECTION', 'Survive the zombie horde until the timer runs out.'],
+      infect: ['INFECTION', 'Zombies are knife-only — get stabbed and you turn. Last human wins.'],
+      koth: ['KING OF THE HILL', 'Hold the glowing hill at the center. First to 100 wins.'],
     }
     const [label, sub] = info[mode] || info.coop
     this.hud.setLobbyMode(label, sub)
@@ -603,6 +630,9 @@ export class Game {
     this.player.isZombie = false
     this.player.team = null
     this.hud.setZombie?.(false)
+    this.kothMode = !!this.modeCfg?.koth
+    this.kothYou = 0; this.kothEnemy = 0
+    this.hillRadius = 8
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
@@ -733,6 +763,24 @@ export class Game {
       if (this.modeCfg.jugg) await this._spawnJuggernaut()
       else if (this.modeCfg.infect) await this._spawnInfectBots(this.modeCfg.bots || 10, this.modeCfg.startZombies || 2)
       else await this._spawnBots(this.modeCfg.bots || 7, this.modeCfg.role || 'fighter')
+    }
+
+    // King of the Hill: a glowing capture ring at the center; bots contest it.
+    if (this.kothMode) {
+      const ring = new THREE.Mesh(
+        new THREE.CylinderGeometry(this.hillRadius, this.hillRadius, 0.3, 40, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })
+      )
+      ring.position.set(0, 1.5, 0)
+      this.world.scene.add(ring)
+      this._hillMesh = ring
+      const disc = new THREE.Mesh(
+        new THREE.TorusGeometry(this.hillRadius, 0.18, 8, 48),
+        new THREE.MeshBasicMaterial({ color: 0xffd24a })
+      )
+      disc.rotation.x = Math.PI / 2; disc.position.y = 0.12
+      this.world.scene.add(disc)
+      this.bots.forEach((b) => { b.objective = { x: 0, z: 0 } }) // bots fight over the hill
     }
     this.hud.setLoading('FINALIZING…', 96)
   }
@@ -886,6 +934,7 @@ export class Game {
     if (attacker && attacker.kills != null) attacker.kills++
     if (!attacker) {
       this.kills = (this.kills || 0) + 1 // player kill (no bot attacker)
+      this.hud.showKillBanner(`ELIMINATED ${bot.name}`)
       // Gun Game: each kill hands you a random gun (melee/grapple excluded — your
       // knife stays as a constant backup).
       if (this.modeCfg?.gungame) {
@@ -1066,6 +1115,7 @@ export class Game {
     await this._dropIn()     // "WORLD FOUND" -> click to drop in (locks the mouse)
     this.state = STATE.PLAYING
     this.hud.show()
+    this.hud.setPlayerCount(null) // solo: no online counter
     this.clock.getDelta() // reset dt
     this._loop()
   }
@@ -1135,6 +1185,7 @@ export class Game {
           this.hud.hideOverlay()
           this.hud.show()
           this.hud.showVoteToggle(true)
+          this.hud.setPlayerCount(this.remotePlayers.size + 1)
           if (this.ctfMode) { this._needBaseSpawn = true; this.hud.setTeamScores(0, 0, true) }
           this.clock.getDelta()
           this._loop()
@@ -1142,11 +1193,14 @@ export class Game {
         onPeerJoin: (id, pname, team) => {
           this._addRemote(id, pname, null, team)
           this.board?.set(id, { name: pname, kills: 0, deaths: 0, team })
+          this.hud.setPlayerCount(this.remotePlayers.size + 1)
+          this.hud.addChat('System', `${pname} joined`, { self: true })
         },
         onPeerLeave: (id) => {
           this.remotePlayers.get(id)?.dispose()
           this.remotePlayers.delete(id)
           this.board?.delete(id)
+          this.hud.setPlayerCount(this.remotePlayers.size + 1)
         },
         onState: (id, p) => this.remotePlayers.get(id)?.setState(p),
         onShoot: (id, from, to) => {
@@ -1270,8 +1324,9 @@ export class Game {
   _winMatch(title, sub, win = true) {
     this.state = STATE.DEAD
     if (!this.input.isTouch) this.input.exitLock()
+    const earned = (this.kills || this.enemyKills || 0) * 10 + (win ? 100 : 25)
     this._recordMatch(win)
-    this.hud.showVictory(title, sub, win)
+    this.hud.showVictory(title, `${sub}   ·   +${earned} ◆ earned`, win)
   }
 
   _onWin(msg) {
@@ -1441,6 +1496,7 @@ export class Game {
       this.kills = (this.kills || 0) + 1
       this.deaths = this.deaths || 0
       this.hud.setScore(`${this.kills}/${this.deaths}`)
+      this.hud.showKillBanner(`ELIMINATED ${victim}`)
     }
   }
 
@@ -1642,6 +1698,19 @@ export class Game {
         if (this.kills >= cfg.killTarget) { this._matchOver = true; this._winMatch('VICTORY', `${cfg.killTarget} eliminations!`) }
       } else if (cfg.jugg) {
         if (this.jugg && !this.jugg.alive) { this._matchOver = true; this._winMatch('JUGGERNAUT DOWN', 'You took down the juggernaut!') }
+      } else if (cfg.koth) {
+        const R = this.hillRadius
+        const inHill = (x, z) => (x * x + z * z) < R * R
+        const youIn = this.player.alive && inHill(this.player.position.x, this.player.position.z)
+        const botIn = this.bots.some((b) => b.alive && inHill(b.position.x, b.position.z))
+        if (youIn && !botIn) this.kothYou += dt * 9
+        else if (botIn && !youIn) this.kothEnemy += dt * 9
+        const tag = youIn && botIn ? 'CONTESTED' : youIn ? 'HOLDING' : botIn ? 'ENEMY HELD' : 'OPEN'
+        this.hud.setObjective('👑 Capture the hill at the center!')
+        this.hud.setStormTimer(`👑 ${tag}  —  You ${Math.floor(this.kothYou)} · Enemy ${Math.floor(this.kothEnemy)}  / 100`)
+        if (this._hillMesh) this._hillMesh.material.color.setHex(youIn && botIn ? 0xff5a5a : youIn ? 0x4ade80 : botIn ? 0xff5a5a : 0xffd24a)
+        if (this.kothYou >= 100) { this._matchOver = true; this._winMatch('HILL CONQUERED', 'You held the hill!') }
+        else if (this.kothEnemy >= 100) { this._matchOver = true; this._winMatch('DEFEAT', 'The enemy held the hill.', false) }
       } else if (cfg.infect) {
         this._matchT = (this._matchT || 0) + dt
         const humanBots = this.bots.filter((b) => b.alive && b.role === 'fighter').length
