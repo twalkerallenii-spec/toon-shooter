@@ -1,14 +1,18 @@
 import * as THREE from 'three'
 import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
+import { skinOf, applyTint } from '../core/skins.js'
 
-// A networked other-player avatar: the animated soldier model with a name tag and
+// A networked other-player avatar: the animated kit character with a name tag and
 // HP bar, smoothly interpolated toward the latest networked state.
 export class RemotePlayer {
   constructor({ world, assets, name, id, fx = null }) {
     this.world = world
+    this.assets = assets
     this.fx = fx
     this.name = name
     this.id = id
+    this.skin = null
+    this._skinLoading = null
     this.group = new THREE.Group()
     this.targetHeight = 1.8
 
@@ -55,14 +59,31 @@ export class RemotePlayer {
 
     world.scene.add(this.group)
 
-    assets.loadModel('models/characters/Character_Soldier.gltf').then((m) => {
-      if (!m) return
+    this.setSkin('Character_Soldier')
+  }
+
+  // Load (or swap to) the given Locker skin: base model + tint.
+  setSkin(id) {
+    if (this.skin === id || this._skinLoading === id) return
+    this._skinLoading = id
+    const skin = skinOf(id)
+    this.assets.loadModel(`models/characters/${skin.base}.gltf`).then((m) => {
+      if (!m || this._skinLoading !== id) return
+      this.skin = id; this._skinLoading = null
+      applyTint(m.scene, skin.tint)
       m.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
       normalizeModel(m.scene, this.targetHeight)
+      // Remove any previous model.
+      for (let i = this.modelPivot.children.length - 1; i >= 0; i--) {
+        const c = this.modelPivot.children[i]
+        this.modelPivot.remove(c); c.traverse?.((o) => { o.geometry?.dispose?.() })
+      }
       this.modelPivot.add(m.scene)
       if (m.animations?.length) {
         this.animator = new CharacterAnimator(m.scene, m.animations)
-        this.animator.play('Idle', { fade: 0 })
+        this.animator.play(this.moving ? 'Run' : 'Idle', { fade: 0 })
+      } else {
+        this.animator = null
       }
     })
   }
@@ -76,6 +97,7 @@ export class RemotePlayer {
 
   setState(p) {
     if (!p) return
+    if (p.skin && p.skin !== this.skin) this.setSkin(p.skin)
     this.target.set(p.x, p.y, p.z)
     // First state: snap above the real spot so the drop-in starts there, not at origin.
     if (!this._gotState) {
