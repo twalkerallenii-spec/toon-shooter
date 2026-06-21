@@ -305,6 +305,38 @@
       </div>
     </div>
 
+    <!-- AI Assistant (Claude) -->
+    <button id="ai-btn" title="AI Assistant (K)">🤖</button>
+    <div id="ai-panel" class="hidden">
+      <div id="ai-head">
+        <span>🤖 VERTEX AI</span>
+        <button id="ai-close" title="Close">✕</button>
+      </div>
+
+      <!-- Password gate -->
+      <div id="ai-lock">
+        <p class="ai-note">Enter the access password to use the AI assistant.</p>
+        <input id="ai-pass" type="password" placeholder="Password" autocomplete="off" />
+        <button id="ai-unlock" class="ai-btn-primary">UNLOCK</button>
+        <div id="ai-lock-msg"></div>
+      </div>
+
+      <!-- Assistant (revealed after unlock) -->
+      <div id="ai-main" class="hidden">
+        <div id="ai-log"></div>
+        <div id="ai-inputrow">
+          <input id="ai-input" placeholder="Ask or tell the AI…  (it can control the game)" autocomplete="off" />
+          <button id="ai-send" class="ai-btn-primary">➤</button>
+        </div>
+        <details id="ai-keybox">
+          <summary>Anthropic API key</summary>
+          <input id="ai-key" type="password" placeholder="sk-ant-…  (stored only in this browser)" autocomplete="off" />
+          <button id="ai-key-save" class="ai-btn-primary">SAVE KEY</button>
+          <p class="ai-note">Your key never leaves your browser. Get one at console.anthropic.com.</p>
+        </details>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
