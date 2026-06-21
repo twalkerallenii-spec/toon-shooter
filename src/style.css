@@ -480,6 +480,18 @@ body.touch #rank-btn { display: block; }
 #challenge-list .ch-bar i { display: block; height: 100%; background: var(--hp); }
 #challenge-list .xp { color: var(--accent); font-weight: 700; }
 
+/* Players online (left column, under the matchmaking card) */
+#online { left: 3%; top: 432px; width: 300px; max-width: 88vw; max-height: 230px; overflow-y: auto; }
+#online-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+#online-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.04); }
+#online-list .on-empty { background: none; opacity: 0.6; justify-content: center; }
+#online-list .on-dot { width: 8px; height: 8px; border-radius: 50%; background: #6a7790; flex: 0 0 auto; }
+#online-list .on-dot.in { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+#online-list .on-name { font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#online-list .on-mode { font-size: 11px; opacity: 0.7; }
+#online-list .on-join { background: var(--accent); color: #07101f; font-weight: 800; font-size: 10px; border: none; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+#online-list .on-join:hover { filter: brightness(1.1); }
+
 /* Rankings (right column) */
 #rankings { top: 472px; right: 16px; }
 #rank-list { list-style: none; display: flex; flex-direction: column; gap: 3px; }
@@ -513,7 +525,7 @@ body.touch #rank-btn { display: block; }
 .ev-new { position: absolute; top: -6px; right: -6px; background: #ff3b6b; color: #fff; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 8px; letter-spacing: 1px; }
 
 @media (max-width: 900px) {
-  #player-card, #season-banner, #challenges, #career, #party, #rankings { display: none; }
+  #player-card, #season-banner, #challenges, #career, #party, #rankings, #online { display: none; }
 }
 .mm-label { font-size: 12px; letter-spacing: 3px; color: var(--accent); font-weight: 800; margin-bottom: 8px; }
 

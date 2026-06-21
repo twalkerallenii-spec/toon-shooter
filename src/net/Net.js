@@ -38,6 +38,7 @@ export class Net {
         this.team = msg.team
         this.connected = true
         this.handlers.onWelcome?.(msg.id, msg.peers || [], msg.team)
+        this.handlers.onAdmin?.(!!msg.admin)
         if (msg.ctf) this.handlers.onCtf?.(msg.ctf)
         break
       case 'peerJoin': this.handlers.onPeerJoin?.(msg.id, msg.name, msg.team); break
@@ -51,6 +52,9 @@ export class Net {
       case 'ctf': this.handlers.onCtf?.(msg.ctf); break
       case 'win': this.handlers.onWin?.(msg); break
       case 'chat': this.handlers.onChat?.(msg.id, msg.name, msg.text, msg.p); break
+      case 'presence': this.handlers.onPresence?.(msg.list); break
+      case 'kicked': this.handlers.onKicked?.(msg.reason); break
+      case 'admin': this.handlers.onAdmin?.(msg.value); break
       case 'rtc': this.handlers.onRtc?.(msg.from, msg.data); break
     }
   }

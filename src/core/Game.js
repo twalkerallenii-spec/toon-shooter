@@ -95,6 +95,7 @@ export class Game {
     this._buildLobby()
     this._lobbyLoop()
     this._populateLobby()
+    this._connectPresence() // appear online + see who else is on
   }
 
   _wireUI() {
@@ -593,6 +594,7 @@ export class Game {
     this.hud.el.overlay.classList.remove('hidden')
     this.hud.el.startBtn.textContent = 'START MATCH'
     this._populateLobby() // refresh stats/level after the match
+    this._connectPresence() // back online in the lobby
     this.audio.startMusic()
     this._lobbyClock.getDelta() // reset dt
     this._lobbyLoop()
@@ -847,6 +849,57 @@ export class Game {
     applyTint(bot.group, 0x55dd55)
     bot.animator?.play?.('Idle', { fade: 0.1 })
     this.hud.addKillFeed(`🧟 ${bot.name} got infected!`)
+  }
+
+  // ---- Lobby presence: show who's online + what they're playing ----
+  _serverUrl() {
+    return (document.getElementById('mp-server')?.value || 'wss://toon-shooter-server.onrender.com').trim()
+  }
+  _connectPresence() {
+    if (this._presenceWs && this._presenceWs.readyState <= 1) return
+    let ws
+    try { ws = new WebSocket(this._serverUrl()) } catch { return }
+    this._presenceWs = ws
+    ws.addEventListener('open', () => {
+      const name = localStorage.getItem('ts_name') || document.getElementById('mp-name')?.value || 'Player'
+      ws.send(JSON.stringify({ t: 'hello', name }))
+    })
+    ws.addEventListener('message', (e) => {
+      let m; try { m = JSON.parse(e.data) } catch { return }
+      if (m.t === 'presence') this._renderOnline(m.list)
+    })
+    ws.addEventListener('close', () => {
+      if (this._presenceWs === ws) this._presenceWs = null
+      if (this.state === STATE.MENU) setTimeout(() => { if (this.state === STATE.MENU) this._connectPresence() }, 4000)
+    })
+    ws.addEventListener('error', () => {})
+  }
+  _closePresence() {
+    if (this._presenceWs) { try { this._presenceWs.close() } catch {} this._presenceWs = null }
+  }
+  _renderOnline(list) {
+    const el = document.getElementById('online-list')
+    const cnt = document.getElementById('online-count')
+    if (cnt) cnt.textContent = list.length
+    if (!el) return
+    const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]))
+    if (!list.length) { el.innerHTML = '<li class="on-empty">No one online right now.</li>'; return }
+    el.innerHTML = list.map((p) => {
+      const joinable = p.inMatch && p.room
+      return `<li><span class="on-dot ${p.inMatch ? 'in' : ''}"></span><span class="on-name">${esc(p.name)}</span><span class="on-mode">${esc(p.modeLabel)}</span>${joinable ? `<button class="on-join" data-room="${esc(p.room)}" data-mode="${esc(p.mode)}">JOIN</button>` : ''}</li>`
+    }).join('')
+    el.querySelectorAll('.on-join').forEach((b) => b.addEventListener('click', () => {
+      document.getElementById('mp-room').value = b.dataset.room
+      const tile = document.querySelector(`.event-tile[data-mode="${b.dataset.mode}"]`)
+      if (tile) { document.querySelectorAll('.event-tile').forEach((t) => t.classList.remove('active')); tile.classList.add('active') }
+      this.startOnline(b.dataset.mode)
+    }))
+  }
+  _onKicked(reason) {
+    const msg = reason === 'banned' ? 'You were banned from this room.' : 'You were kicked by the host.'
+    this._disconnect()
+    if (this.state !== STATE.MENU) this._toLobby()
+    window.alert(msg)
   }
 
   async _toggleVoice() {
@@ -1108,6 +1161,7 @@ export class Game {
   async start(mode = 'coop') {
     this.audio.resume()
     this.audio.stopMusic()
+    this._closePresence()
     this.onlineMode = null // solo
     this.soloMode = mode
     this.brMode = mode === 'br'
@@ -1148,6 +1202,7 @@ export class Game {
   startOnline(modeOverride) {
     this.audio.resume()
     this.audio.stopMusic()
+    this._closePresence() // the match connection registers presence instead
     const status = document.getElementById('mp-status')
     const name = (document.getElementById('mp-name').value || '').trim() || `Player${Math.floor(Math.random() * 1000)}`
     const roomName = (document.getElementById('mp-room').value || 'lobby').trim()
@@ -1195,6 +1250,7 @@ export class Game {
           this.hud.show()
           this.hud.showVoteToggle(true)
           this.hud.setPlayerCount(this.remotePlayers.size + 1)
+          if (this.isAdmin) this.hud.addChat('System', "You're the host — type /ban <name> or /kick <name>", { self: true })
           if (this.ctfMode) { this._needBaseSpawn = true; this.hud.setTeamScores(0, 0, true) }
           this.clock.getDelta()
           this._loop()
@@ -1227,6 +1283,9 @@ export class Game {
           }
           this.hud.addChat(name, text, { self: id === this.net?.id, near })
         },
+        onPresence: (list) => this._renderOnline(list),
+        onAdmin: (v) => { this.isAdmin = v },
+        onKicked: (reason) => this._onKicked(reason),
         onHit: (fromId, dmg) => {
           if (!this.player.alive) return
           this._lastAttacker = fromId
