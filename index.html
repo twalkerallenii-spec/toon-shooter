@@ -195,8 +195,10 @@
         <p class="locker-note">Earn ◆ from matches (kills + wins), then unlock skins here.</p>
       </div>
 
-      <!-- Player card (top-right) -->
-      <div class="lobby-panel panel-play" id="player-card">
+      <!-- Right rail: stacked info sections (scrolls if tall) -->
+      <div id="right-rail" class="panel-play">
+      <!-- Player card -->
+      <div class="lobby-panel" id="player-card">
         <div class="pc-top">
           <div class="pc-avatar" id="pc-avatar">🪖</div>
           <div class="pc-info">
@@ -209,7 +211,7 @@
       </div>
 
       <!-- Season / battle pass banner -->
-      <div class="lobby-panel panel-play" id="season-banner">
+      <div class="lobby-panel" id="season-banner">
         <div class="sb-tag">SEASON 1</div>
         <div class="sb-title">NEON DROP</div>
         <div class="sb-bar"><div id="sb-fill"></div></div>
@@ -217,13 +219,13 @@
       </div>
 
       <!-- Daily challenges -->
-      <div class="lobby-panel panel-play" id="challenges">
+      <div class="lobby-panel" id="challenges">
         <div class="lp-title">DAILY CHALLENGES</div>
         <ul id="challenge-list"></ul>
       </div>
 
       <!-- Career stats -->
-      <div class="lobby-panel panel-play" id="career">
+      <div class="lobby-panel" id="career">
         <div class="lp-title">CAREER</div>
         <div class="career-grid">
           <div><b id="st-wins">0</b><span>Wins</span></div>
@@ -234,27 +236,28 @@
       </div>
 
       <!-- Players online (live presence) -->
-      <div class="lobby-panel panel-play" id="online">
+      <div class="lobby-panel" id="online">
         <div class="lp-title">PLAYERS ONLINE · <span id="online-count">0</span></div>
         <ul id="online-list"><li class="on-empty">Connecting…</li></ul>
       </div>
 
       <!-- Rankings (local leaderboard by total kills) -->
-      <div class="lobby-panel panel-play" id="rankings">
+      <div class="lobby-panel" id="rankings">
         <div class="lp-title">RANKINGS</div>
         <ol id="rank-list"></ol>
       </div>
+      </div><!-- /right-rail -->
 
-      <!-- News ticker -->
-      <div class="panel-play" id="news"><span id="news-text">🔥 Welcome to VERTEX! · Loot weapons off the map · TAB switches weapons · X discards your gun · Headshots deal 2× · Infection: stab survivors to turn them · Capture the flag vs CPUs</span></div>
-
-      <!-- Party row -->
+      <!-- Party row (hidden party (top-left, under matchmaking) -->
       <div class="lobby-panel panel-play" id="party">
         <div class="party-slot filled">🪖<span id="party-you">You</span></div>
         <div class="party-slot empty">+</div>
         <div class="party-slot empty">+</div>
         <div class="party-slot empty">+</div>
       </div>
+
+      <!-- News ticker -->
+      <div class="panel-play" id="news"><span id="news-text">🔥 Welcome to VERTEX! · Loot weapons off the map · TAB switches weapons · X discards your gun · Headshots deal 2× · Infection: stab survivors to turn them · Capture the flag vs CPUs</span></div>
 
       <!-- Bottom playlist tiles (the "apps" = events) -->
       <div id="event-bar">
@@ -302,38 +305,6 @@
         <div class="match-summary"></div>
         <button id="pause-resume" class="big-btn">RESUME</button>
         <button id="pause-quit" class="alt-btn">QUIT TO LOBBY</button>
-      </div>
-    </div>
-
-    <!-- AI Assistant (Claude) -->
-    <button id="ai-btn" title="AI Assistant (K)">🤖</button>
-    <div id="ai-panel" class="hidden">
-      <div id="ai-head">
-        <span>🤖 VERTEX AI</span>
-        <button id="ai-close" title="Close">✕</button>
-      </div>
-
-      <!-- Password gate -->
-      <div id="ai-lock">
-        <p class="ai-note">Enter the access password to use the AI assistant.</p>
-        <input id="ai-pass" type="password" placeholder="Password" autocomplete="off" />
-        <button id="ai-unlock" class="ai-btn-primary">UNLOCK</button>
-        <div id="ai-lock-msg"></div>
-      </div>
-
-      <!-- Assistant (revealed after unlock) -->
-      <div id="ai-main" class="hidden">
-        <div id="ai-log"></div>
-        <div id="ai-inputrow">
-          <input id="ai-input" placeholder="Ask or tell the AI…  (it can control the game)" autocomplete="off" />
-          <button id="ai-send" class="ai-btn-primary">➤</button>
-        </div>
-        <details id="ai-keybox">
-          <summary>Anthropic API key</summary>
-          <input id="ai-key" type="password" placeholder="sk-ant-…  (stored only in this browser)" autocomplete="off" />
-          <button id="ai-key-save" class="ai-btn-primary">SAVE KEY</button>
-          <p class="ai-note">Your key never leaves your browser. Get one at console.anthropic.com.</p>
-        </details>
       </div>
     </div>
 

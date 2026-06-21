@@ -19,7 +19,6 @@ import { Net } from '../net/Net.js'
 import { Voice } from '../net/Voice.js'
 import { RemotePlayer } from '../entities/RemotePlayer.js'
 import { SKINS, skinOf, applyTint } from './skins.js'
-import { Assistant } from './Assistant.js'
 
 // Game states
 const STATE = { MENU: 'menu', LOADING: 'loading', PLAYING: 'playing', PAUSED: 'paused', DEAD: 'dead' }
@@ -97,11 +96,6 @@ export class Game {
     this._lobbyLoop()
     this._populateLobby()
     this._connectPresence() // appear online + see who else is on
-
-    // In-game Claude assistant (password-gated, uses the player's own API key).
-    window.game = this // exposed for the assistant's eval_js tool
-    this.assistant = new Assistant({ exec: (name, input) => this._aiExec(name, input) })
-    this._wireAssistant()
   }
 
   _wireUI() {
@@ -244,7 +238,7 @@ export class Game {
 
     this.input.onLockChange = (locked) => {
       // Losing the pointer lock mid-game = pause (desktop only) — unless chatting.
-      if (!this.input.isTouch && !locked && this.state === STATE.PLAYING && !this._chatOpen && !this._aiOpen) this.pause()
+      if (!this.input.isTouch && !locked && this.state === STATE.PLAYING && !this._chatOpen) this.pause()
     }
 
     // Pointer lock can't be requested right after an async load (no user
@@ -262,10 +256,7 @@ export class Game {
       // Enter opens chat.
       if (e.code === 'Enter' && this.state === STATE.PLAYING && !this._chatOpen && !e.repeat) { e.preventDefault(); this._openChat() }
       // M toggles proximity voice (the 🎤 button can't be clicked while aiming).
-      if (e.code === 'KeyM' && this.state === STATE.PLAYING && !e.repeat) this._toggleVoice()
-      // K toggles the AI assistant (works in lobby + match).
-      if (e.code === 'KeyK' && !e.repeat) { const ae = document.activeElement; if (!ae || (ae.tagName !== 'INPUT' && ae.tagName !== 'TEXTAREA')) this._toggleAi?.() }
-    })
+      if (e.code === 'KeyM' && this.state === STATE.PLAYING && !e.repeat) this._toggleVoice()    })
 
     // Mobile RANK button (toggle).
     const rankBtn = document.getElementById('rank-btn')
@@ -908,95 +899,6 @@ export class Game {
     this._disconnect()
     if (this.state !== STATE.MENU) this._toLobby()
     window.alert(msg)
-  }
-
-  // ---- In-game Claude assistant ----
-  _wireAssistant() {
-    const $ = (id) => document.getElementById(id)
-    const panel = $('ai-panel'), log = $('ai-log')
-    const PASSWORD = '115243'
-    const unlocked = () => localStorage.getItem('ts_ai_unlocked') === '1'
-    const reveal = () => {
-      $('ai-lock').classList.add('hidden'); $('ai-main').classList.remove('hidden')
-      if (!this.assistant.hasKey()) $('ai-keybox').open = true
-    }
-    if (unlocked()) reveal()
-    if (this.assistant.hasKey()) $('ai-key').value = localStorage.getItem('ts_anthropic_key')
-
-    const addMsg = (cls, text) => {
-      const d = document.createElement('div'); d.className = 'ai-msg ' + cls; d.textContent = text
-      log.appendChild(d); log.scrollTop = log.scrollHeight
-    }
-    const open = () => {
-      panel.classList.remove('hidden'); this._aiOpen = true
-      if (this.state === STATE.PLAYING && !this.input.isTouch) this.input.exitLock()
-      ;(unlocked() ? $('ai-input') : $('ai-pass'))?.focus()
-    }
-    const close = () => {
-      panel.classList.add('hidden'); this._aiOpen = false
-      if (this.state === STATE.PLAYING && !this.input.isTouch && !this.input.locked) this.input.requestLock()
-    }
-    this._toggleAi = () => panel.classList.contains('hidden') ? open() : close()
-    $('ai-btn').addEventListener('click', this._toggleAi)
-    $('ai-close').addEventListener('click', close)
-
-    const tryUnlock = () => {
-      if ($('ai-pass').value.trim() === PASSWORD) { localStorage.setItem('ts_ai_unlocked', '1'); $('ai-lock-msg').textContent = ''; reveal(); $('ai-input').focus() }
-      else $('ai-lock-msg').textContent = 'Incorrect password.'
-    }
-    $('ai-unlock').addEventListener('click', tryUnlock)
-    $('ai-pass').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.code === 'Enter') tryUnlock() })
-
-    $('ai-key-save').addEventListener('click', () => {
-      const k = $('ai-key').value.trim()
-      if (k) { localStorage.setItem('ts_anthropic_key', k); $('ai-keybox').open = false; addMsg('ai-bot', '✅ API key saved. Ask me anything — I can control the game.') }
-    })
-    $('ai-key').addEventListener('keydown', (e) => e.stopPropagation())
-
-    const send = () => {
-      const t = $('ai-input').value.trim(); if (!t) return
-      $('ai-input').value = ''; addMsg('ai-user', t)
-      this.assistant.send(t, (txt) => addMsg('ai-bot', txt), (tool) => addMsg('ai-tool', '⚙ ' + tool))
-    }
-    $('ai-send').addEventListener('click', send)
-    $('ai-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.code === 'Enter') send() })
-  }
-
-  // Execute an assistant tool against the live game.
-  async _aiExec(name, input = {}) {
-    const W = this.weapons
-    switch (name) {
-      case 'get_state': return {
-        state: this.state, mode: this.onlineMode || this.soloMode || null, online: !!this.net,
-        hp: this.player?.hp, maxHp: this.player?.maxHp, shield: this.player?.shield, alive: this.player?.alive,
-        weapon: W?.def?.key, ownedWeapons: [...(W?.owned || [])].map((i) => W.defs[i]?.key),
-        coins: this._coins(), character: this.character, bots: this.bots?.length || 0,
-        kills: this.kills || this.enemyKills || 0, settings: this.settings,
-      }
-      case 'start_match': this.startOnline(input.mode); return 'Starting ' + input.mode
-      case 'set_setting': this.settings[input.key] = input.value; localStorage.setItem('ts_settings', JSON.stringify(this.settings)); this._applySettings(); return `${input.key} = ${input.value}`
-      case 'give_weapon': {
-        const i = W.defs.findIndex((d) => d.key.toLowerCase() === String(input.weapon).toLowerCase())
-        if (i < 0) return 'No weapon named ' + input.weapon
-        W.give(i); this.hud.setOwned(W.owned); return 'Gave ' + W.defs[i].key
-      }
-      case 'give_all_weapons': W.defs.forEach((d, i) => W.owned.add(i)); W.ammoByWeapon = W.defs.map((d) => d.mag); this.hud.setOwned(W.owned); return 'Gave all weapons'
-      case 'set_health': this.player.hp = Math.max(0, Math.min(this.player.maxHp, input.hp)); this.hud.setHp(this.player.hp, this.player.maxHp); return 'HP = ' + this.player.hp
-      case 'set_shield': this.player.shield = Math.max(0, Math.min(100, input.shield)); this.hud.setShield(this.player.shield); return 'Shield = ' + this.player.shield
-      case 'god_mode': this._god = !!input.on; if (this._god) { this.player.hp = this.player.maxHp; this.player.shield = 100 } return 'God mode ' + (this._god ? 'ON' : 'off')
-      case 'spawn_bots': await this._spawnBots(Math.max(1, Math.min(20, input.count || 4)), input.role || 'fighter'); return `Spawned ${input.count} bots`
-      case 'add_coins': this._setCoins(this._coins() + input.amount); this._populateLobby(); return 'Coins = ' + this._coins()
-      case 'unlock_skin': { const o = this._ownedSkins(); o.push(input.id); this._saveOwned(o); this._renderLocker(); this._renderStore(); return 'Unlocked ' + input.id }
-      case 'set_skin': this.character = input.id; localStorage.setItem('ts_char', this.character); this._setLobbyCharacter(this.character); this._populateLobby(); return 'Skin = ' + input.id
-      case 'announce': this.hud.addKillFeed('🤖 ' + input.text); return 'Announced'
-      case 'eval_js': {
-        const game = this // eslint-disable-line no-unused-vars
-        // eslint-disable-next-line no-eval
-        const r = eval(input.code)
-        return r === undefined ? '(ok)' : (typeof r === 'object' ? JSON.stringify(r) : String(r))
-      }
-      default: return 'Unknown tool: ' + name
-    }
   }
 
   async _toggleVoice() {
@@ -1718,8 +1620,6 @@ export class Game {
 
     try {
     const dt = Math.min(0.05, this.clock.getDelta())
-
-    if (this._god && this.player) { this.player.hp = this.player.maxHp; this.player.shield = 100 } // AI god mode
 
     // Enter / exit a car with E (edge-triggered).
     const eDown = this.input.isDown('KeyE')
