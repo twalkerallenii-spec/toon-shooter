@@ -23,6 +23,16 @@ const STATE = { MENU: 'menu', LOADING: 'loading', PLAYING: 'playing', PAUSED: 'p
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Tiny deterministic PRNG for the lobby scenery.
+function mulberryLobby(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 // Solo combat modes (vs bots) on the normal arena. Each is a small rule tweak.
 const SOLO_MODES = {
   ffa: { label: 'FFA DEATHMATCH', bots: 7, role: 'fighter', killTarget: 15, map: 'outpost' },
@@ -81,6 +91,7 @@ export class Game {
     // Animated lobby scene behind the menu.
     this._buildLobby()
     this._lobbyLoop()
+    this._populateLobby()
   }
 
   _wireUI() {
@@ -103,6 +114,9 @@ export class Game {
     const savedServer = localStorage.getItem('ts_server') || ''
     serverInput.value = params.get('server') || savedServer || DEFAULT_SERVER
     serverInput.addEventListener('change', () => localStorage.setItem('ts_server', serverInput.value.trim()))
+    const nameInput = document.getElementById('mp-name')
+    if (localStorage.getItem('ts_name')) nameInput.value = localStorage.getItem('ts_name')
+    nameInput.addEventListener('change', () => { localStorage.setItem('ts_name', nameInput.value.trim()); this._populateLobby() })
     document.getElementById('online-btn').addEventListener('click', () => {
       if (this.state === STATE.PLAYING) return
       localStorage.setItem('ts_server', serverInput.value.trim())
@@ -142,9 +156,9 @@ export class Game {
       tab.addEventListener('click', () => {
         const p = tab.dataset.panel
         document.querySelectorAll('.top-tab').forEach((t) => t.classList.toggle('active', t === tab))
-        document.querySelector('.panel-play').classList.toggle('hidden', p !== 'play')
-        document.querySelector('.panel-locker').classList.toggle('hidden', p !== 'locker')
-        document.querySelector('.panel-store').classList.toggle('hidden', p !== 'store')
+        document.querySelectorAll('.panel-play').forEach((el) => el.classList.toggle('hidden', p !== 'play'))
+        document.querySelectorAll('.panel-locker').forEach((el) => el.classList.toggle('hidden', p !== 'locker'))
+        document.querySelectorAll('.panel-store').forEach((el) => el.classList.toggle('hidden', p !== 'store'))
         document.getElementById('event-bar').style.display = p === 'play' ? '' : 'none'
       })
     })
@@ -157,6 +171,7 @@ export class Game {
         localStorage.setItem('ts_char', this.character)
         document.querySelectorAll('#char-grid .char-card').forEach((c) => c.classList.toggle('active', c === card))
         this._setLobbyCharacter(this.character)
+        this._populateLobby()
       })
     })
 
@@ -255,28 +270,87 @@ export class Game {
     this.startOnline(mode)
   }
 
-  // ---- Animated Fortnite-style lobby (rotating character on a podium) ----
+  // ---- Animated Fortnite-style lobby: stage, lights, skyline, FX ----
   _buildLobby() {
-    this.lobbyScene = new THREE.Scene()
-    this.lobbyScene.background = new THREE.Color(0x0e1530)
-    this.lobbyScene.fog = new THREE.Fog(0x0e1530, 12, 32)
-    this.lobbyScene.add(new THREE.HemisphereLight(0xcfe0ff, 0x202840, 1.1))
-    const key = new THREE.DirectionalLight(0xfff0d0, 2.2); key.position.set(4, 7, 6); this.lobbyScene.add(key)
-    const rim = new THREE.DirectionalLight(0x66aaff, 1.4); rim.position.set(-6, 3, -5); this.lobbyScene.add(rim)
+    const scene = new THREE.Scene()
+    this.lobbyScene = scene
+    scene.fog = new THREE.Fog(0x121641, 22, 70)
+
+    // Gradient dusk sky dome.
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(90, 24, 16), new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false,
+      uniforms: { top: { value: new THREE.Color(0x1c2c70) }, bot: { value: new THREE.Color(0x5a2c74) } },
+      vertexShader: 'varying float h; void main(){ h=normalize(position).y; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader: 'varying float h; uniform vec3 top; uniform vec3 bot; void main(){ gl_FragColor=vec4(mix(bot,top,clamp(h*1.3+0.2,0.0,1.0)),1.0);}',
+    })))
+
+    // Lights — key, rim, two colored accents.
+    scene.add(new THREE.HemisphereLight(0xcfe0ff, 0x241a3a, 1.0))
+    const key = new THREE.DirectionalLight(0xfff0d0, 2.1); key.position.set(5, 9, 6); scene.add(key)
+    const rim = new THREE.DirectionalLight(0x6a8cff, 1.6); rim.position.set(-6, 4, -6); scene.add(rim)
+    scene.add(Object.assign(new THREE.PointLight(0xff5aa0, 0.9, 34), { position: new THREE.Vector3(-5, 4, 3) }))
+    scene.add(Object.assign(new THREE.PointLight(0x5ad1ff, 0.9, 34), { position: new THREE.Vector3(7, 3, -2) }))
 
     const podCenter = 2.4
-    const ped = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.5, 1.8, 0.4, 36),
-      new THREE.MeshStandardMaterial({ color: 0x222a44, emissive: 0x163a8a, emissiveIntensity: 0.7, roughness: 0.4 })
-    )
-    ped.position.set(podCenter, 0.0, 0); this.lobbyScene.add(ped)
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.05, 8, 48), new THREE.MeshBasicMaterial({ color: 0xffcb3d }))
-    ring.rotation.x = Math.PI / 2; ring.position.set(podCenter, 0.25, 0); this.lobbyScene.add(ring)
-
-    this.lobbyCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100)
-    this.lobbyCam.position.set(-0.2, 2.3, 7); this.lobbyCam.lookAt(podCenter, 1.5, 0)
-    this._lobbyClock = new THREE.Clock()
     this._podCenter = podCenter
+
+    // Stage floor + grid.
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(11, 48), new THREE.MeshStandardMaterial({ color: 0x141a30, roughness: 0.45, metalness: 0.35 }))
+    floor.rotation.x = -Math.PI / 2; scene.add(floor)
+    const grid = new THREE.GridHelper(22, 28, 0x2a3a7a, 0x1a2348); grid.position.y = 0.02; scene.add(grid)
+
+    // Podium + 3 spinning accent rings.
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 0.5, 40),
+      new THREE.MeshStandardMaterial({ color: 0x222a44, emissive: 0x163a8a, emissiveIntensity: 0.85, roughness: 0.3, metalness: 0.5 }))
+    ped.position.set(podCenter, 0, 0); scene.add(ped)
+    this._lobbyRings = []
+    const ringCols = [0xffcb3d, 0x5ad1ff, 0xff5aa0]
+    for (let i = 0; i < 3; i++) {
+      const r = new THREE.Mesh(new THREE.TorusGeometry(1.7 + i * 0.4, 0.04, 8, 64), new THREE.MeshBasicMaterial({ color: ringCols[i] }))
+      r.rotation.x = Math.PI / 2; r.position.set(podCenter, 0.3 + i * 0.05, 0)
+      scene.add(r); this._lobbyRings.push(r)
+    }
+
+    // Spotlight beams (faint additive cones angled onto the podium).
+    this._lobbySpots = []
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(1.4, 9, 18, 1, true),
+        new THREE.MeshBasicMaterial({ color: [0xff7adf, 0x7ad1ff, 0xffe07a][i], transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }))
+      cone.position.set(podCenter + Math.cos(a) * 3.2, 6.5, Math.sin(a) * 3.2)
+      cone.rotation.x = Math.PI; cone.rotation.z = Math.cos(a) * 0.25
+      scene.add(cone); this._lobbySpots.push({ cone, a })
+    }
+
+    // Distant city skyline silhouette.
+    const bMat = new THREE.MeshStandardMaterial({ color: 0x0c1130, roughness: 1 })
+    const rng = mulberryLobby(7)
+    for (let i = 0; i < 60; i++) {
+      const ang = rng() * Math.PI * 2, dist = 26 + rng() * 26
+      const h = 6 + rng() * 26, w = 3 + rng() * 4
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), bMat)
+      b.position.set(podCenter + Math.cos(ang) * dist, h / 2 - 1, Math.sin(ang) * dist)
+      scene.add(b)
+    }
+
+    // Floating ambient spark particles.
+    const N = 160
+    const pos = new Float32Array(N * 3)
+    this._lobbyPV = new Float32Array(N)
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = podCenter + (rng() - 0.5) * 22
+      pos[i * 3 + 1] = rng() * 16
+      pos[i * 3 + 2] = (rng() - 0.5) * 22
+      this._lobbyPV[i] = 0.3 + rng() * 0.8
+    }
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    this._lobbyParticles = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0x9fd0ff, size: 0.08, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }))
+    scene.add(this._lobbyParticles)
+
+    this.lobbyCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200)
+    this.lobbyCam.position.set(-0.4, 2.4, 7.2); this.lobbyCam.lookAt(podCenter, 1.5, 0)
+    this._lobbyClock = new THREE.Clock()
+    this._lobbyT = 0
     this._setLobbyCharacter(this.character)
   }
 
@@ -305,13 +379,77 @@ export class Game {
     if (this.state !== STATE.MENU) { this._lobbyRAF = null; return }
     this._lobbyRAF = requestAnimationFrame(() => this._lobbyLoop())
     const dt = this._lobbyClock.getDelta()
+    this._lobbyT = (this._lobbyT || 0) + dt
     if (this.lobbyModel) this.lobbyModel.rotation.y += dt * 0.5
     this.lobbyMixer?.update(dt)
+    // Spin the accent rings at different speeds/axes.
+    if (this._lobbyRings) this._lobbyRings.forEach((r, i) => { r.rotation.z += dt * (0.4 + i * 0.25) * (i % 2 ? -1 : 1) })
+    // Sway the spotlight beams.
+    if (this._lobbySpots) this._lobbySpots.forEach((s) => { s.cone.rotation.z = Math.cos(this._lobbyT * 0.6 + s.a) * 0.28 })
+    // Drift particles upward, wrap around.
+    if (this._lobbyParticles) {
+      const a = this._lobbyParticles.geometry.attributes.position
+      for (let i = 0; i < this._lobbyPV.length; i++) {
+        a.array[i * 3 + 1] += this._lobbyPV[i] * dt
+        if (a.array[i * 3 + 1] > 16) a.array[i * 3 + 1] = 0
+      }
+      a.needsUpdate = true
+    }
+    // Gentle camera orbit for life.
+    const pc = this._podCenter || 2.4
+    this.lobbyCam.position.x = -0.4 + Math.sin(this._lobbyT * 0.2) * 0.6
+    this.lobbyCam.lookAt(pc, 1.5, 0)
     this.renderer.render(this.lobbyScene, this.lobbyCam)
   }
 
   _stopLobby() {
     if (this._lobbyRAF) { cancelAnimationFrame(this._lobbyRAF); this._lobbyRAF = null }
+  }
+
+  _stats() {
+    try { return JSON.parse(localStorage.getItem('ts_stats') || '{}') } catch { return {} }
+  }
+  _recordMatch(won) {
+    const s = this._stats()
+    s.matches = (s.matches || 0) + 1
+    s.kills = (s.kills || 0) + (this.kills || this.enemyKills || 0)
+    s.wins = (s.wins || 0) + (won ? 1 : 0)
+    s.xp = (s.xp || 0) + (won ? 300 : 120) + (this.kills || this.enemyKills || 0) * 20
+    localStorage.setItem('ts_stats', JSON.stringify(s))
+  }
+
+  // Fill the lobby panels (level, XP, season, challenges, career, avatar).
+  _populateLobby() {
+    const $ = (id) => document.getElementById(id)
+    const s = this._stats()
+    const xp = s.xp || 0, kills = s.kills || 0, wins = s.wins || 0, matches = s.matches || 0
+    const level = 1 + Math.floor(xp / 1000), inLvl = xp % 1000
+    if ($('pc-level')) $('pc-level').textContent = level
+    if ($('pc-xpfill')) $('pc-xpfill').style.width = `${(inLvl / 1000) * 100}%`
+    if ($('pc-xptext')) $('pc-xptext').textContent = `${inLvl} / 1000 XP`
+    const tier = 1 + Math.floor(xp / 500)
+    if ($('sb-tier')) $('sb-tier').textContent = Math.min(100, tier)
+    if ($('sb-fill')) $('sb-fill').style.width = `${((xp % 500) / 500) * 100}%`
+    if ($('st-wins')) $('st-wins').textContent = wins
+    if ($('st-kills')) $('st-kills').textContent = kills
+    if ($('st-matches')) $('st-matches').textContent = matches
+    if ($('st-kd')) $('st-kd').textContent = (kills / Math.max(1, matches)).toFixed(1)
+    const name = localStorage.getItem('ts_name') || (document.getElementById('mp-name')?.value) || 'Recruit'
+    if ($('pc-name')) $('pc-name').textContent = name
+    if ($('party-you')) $('party-you').textContent = name
+    const av = { Character_Soldier: '🪖', Character_Hazmat: '☣️', Character_Enemy: '👽' }[this.character] || '🪖'
+    if ($('pc-avatar')) $('pc-avatar').textContent = av
+    // Daily challenges with live progress from stats.
+    const ch = [
+      { t: 'Get 20 kills', cur: Math.min(kills, 20), max: 20, xp: 200 },
+      { t: 'Win a match', cur: Math.min(wins, 1), max: 1, xp: 300 },
+      { t: 'Play 5 matches', cur: Math.min(matches, 5), max: 5, xp: 150 },
+    ]
+    const list = $('challenge-list')
+    if (list) list.innerHTML = ch.map((c) =>
+      `<li><div class="ch-row"><span>${c.t}</span><span class="xp">+${c.xp}</span></div>
+       <div class="ch-bar"><i style="width:${(c.cur / c.max) * 100}%"></i></div>
+       <div style="font-size:10px;opacity:.6">${c.cur}/${c.max}</div></li>`).join('')
   }
 
   // Return to the lobby menu (from victory/game-over).
@@ -322,6 +460,7 @@ export class Game {
     this.hud.hidePause()
     this.hud.el.overlay.classList.remove('hidden')
     this.hud.el.startBtn.textContent = 'START MATCH'
+    this._populateLobby() // refresh stats/level after the match
     this._lobbyClock.getDelta() // reset dt
     this._lobbyLoop()
   }
@@ -831,6 +970,7 @@ export class Game {
     if (this.brMode) {
       this.state = STATE.DEAD
       if (!this.input.isTouch) this.input.exitLock()
+      this._recordMatch(false)
       this.hud.showPause('ELIMINATED', `Kills: ${this.kills}.`, 'PLAY AGAIN')
       return
     }
@@ -872,6 +1012,7 @@ export class Game {
   _winMatch(title, sub, win = true) {
     this.state = STATE.DEAD
     if (!this.input.isTouch) this.input.exitLock()
+    this._recordMatch(win)
     this.hud.showVictory(title, sub, win)
   }
 
@@ -982,6 +1123,7 @@ export class Game {
   gameOver() {
     this.state = STATE.DEAD
     this.input.exitLock()
+    this._recordMatch(false)
     this.hud.showPause('YOU FELL', `Wave ${this.spawner.wave}. Score: ${this.score}.`, 'PLAY AGAIN')
   }
 
