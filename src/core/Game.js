@@ -228,6 +228,8 @@ export class Game {
       if (e.code === 'KeyX' && this.state === STATE.PLAYING && !e.repeat) this._discardWeapon()
       // Enter opens chat.
       if (e.code === 'Enter' && this.state === STATE.PLAYING && !this._chatOpen && !e.repeat) { e.preventDefault(); this._openChat() }
+      // M toggles proximity voice (the 🎤 button can't be clicked while aiming).
+      if (e.code === 'KeyM' && this.state === STATE.PLAYING && !e.repeat) this._toggleVoice()
     })
 
     // Mobile RANK button (toggle).
@@ -253,14 +255,8 @@ export class Game {
     document.getElementById('chat-btn')?.addEventListener('click', () => {
       if (this.state === STATE.PLAYING) this._chatOpen ? this._closeChat() : this._openChat()
     })
-    // Proximity voice toggle.
-    const micBtn = document.getElementById('mic-btn')
-    micBtn?.addEventListener('click', async () => {
-      if (!this.voice) { this.hud.addChat('System', 'Voice needs an online match.', { self: true }); return }
-      const on = await this.voice.toggle()
-      micBtn.classList.toggle('on', on)
-      this.hud.addChat('System', on ? '🎤 Voice ON — talk to nearby players.' : '🔇 Voice off.', { self: true })
-    })
+    // Proximity voice toggle (button works in menus; press M in a match).
+    document.getElementById('mic-btn')?.addEventListener('click', () => this._toggleVoice())
 
     const chatInput = this.hud.el.chatInput
     chatInput?.addEventListener('keydown', (e) => {
@@ -798,6 +794,13 @@ export class Game {
     applyTint(bot.group, 0x55dd55)
     bot.animator?.play?.('Idle', { fade: 0.1 })
     this.hud.addKillFeed(`🧟 ${bot.name} got infected!`)
+  }
+
+  async _toggleVoice() {
+    if (!this.voice) { this.hud.addChat('System', 'Voice needs an online match.', { self: true }); return }
+    const on = await this.voice.toggle()
+    document.getElementById('mic-btn')?.classList.toggle('on', on)
+    this.hud.addChat('System', on ? '🎤 Voice ON — talk to nearby players (M to mute).' : '🔇 Voice off.', { self: true })
   }
 
   _openChat() {
