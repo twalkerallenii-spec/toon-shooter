@@ -267,6 +267,14 @@ export class Game {
       // Q = ping a location, T = spray a tag on the surface you're aiming at.
       if (e.code === 'KeyQ' && this.state === STATE.PLAYING && !e.repeat) this._placePing()
       if (e.code === 'KeyT' && this.state === STATE.PLAYING && !e.repeat) this._placeSpray()
+      // B = toggle build mode; 1/2/3 pick wall/floor/ramp while building.
+      if (e.code === 'KeyB' && this.state === STATE.PLAYING && !e.repeat) this._toggleBuild()
+      if (this.buildMode && this.state === STATE.PLAYING && !e.repeat) {
+        if (e.code === 'Digit1') this._setBuildPiece('wall')
+        else if (e.code === 'Digit2') this._setBuildPiece('floor')
+        else if (e.code === 'Digit3') this._setBuildPiece('ramp')
+        else if (e.code === 'Escape') this._toggleBuild()
+      }
     })
 
     // Mobile RANK button (toggle).
@@ -712,6 +720,7 @@ export class Game {
     this.kills = 0; this._recorded = false // stats recorded once per match
     this._fx = [] // pings/sprays (old ones die with the rebuilt scene)
     this._supplyTimer = 38 // BR supply-drop countdown
+    this.buildMode = false; this._builds = []; this._buildGhost = null; this._buildGhostPiece = null
     this.pickups.onPickup = (type, wi) => {
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
         : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
@@ -1767,7 +1776,9 @@ export class Game {
     // Shooting: auto weapons fire while held; semi-auto fire once per click.
     let firedThisFrame = false
     const click = this.input.consumeClick()
-    const wantFire = (this.weapons.auto ? this.input.mouse.down : click) && !this.driving
+    // Build mode: click places the current piece instead of firing.
+    if (this.buildMode) { this._updateBuildGhost(); if (click && this.player.alive) this._placeBuild() }
+    const wantFire = (this.weapons.auto ? this.input.mouse.down : click) && !this.driving && !this.buildMode
     if (wantFire && this.player.alive) {
       const muzzle = this.player.getMuzzleWorldPosition(this._muzzle)
       const remotes = this.net ? [...this.remotePlayers.values()] : []
@@ -2247,6 +2258,89 @@ export class Game {
         this._fx.splice(i, 1)
       }
     }
+  }
+
+  // ---- Build mode (walls / floors / ramps) ----
+  _toggleBuild() {
+    if (this.driving) return
+    this.buildMode = !this.buildMode
+    if (this.buildMode) {
+      this.buildPiece = this.buildPiece || 'wall'
+      this._updateBuildGhost()
+      this.hud.setObjective('🔨 BUILD  [1] Wall  [2] Floor  [3] Ramp  ·  Click to place  ·  B / Esc to exit')
+    } else {
+      if (this._buildGhost) this._buildGhost.visible = false
+      this.hud.setObjective('')
+    }
+  }
+
+  _setBuildPiece(p) {
+    this.buildPiece = p
+    this._updateBuildGhost()
+    this.hud.setObjective(`🔨 BUILD: ${p.toUpperCase()}  ·  [1] Wall  [2] Floor  [3] Ramp  ·  Click to place  ·  B / Esc to exit`)
+  }
+
+  _makePiece(piece, ghost) {
+    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, metalness: 0.05, transparent: ghost, opacity: ghost ? 0.4 : 1, emissive: ghost ? 0x2a5a8a : 0x000000 })
+    let obj
+    if (piece === 'wall') {
+      obj = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 0.4), mat(0x8fc4ff)); obj.userData.localY = 2
+    } else if (piece === 'floor') {
+      obj = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 4), mat(0xc9a36a)); obj.userData.localY = -0.2
+    } else { // ramp — a tilted plank you mantle up
+      obj = new THREE.Group()
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 5.66), mat(0xc9a36a))
+      plank.rotation.x = -Math.PI / 4
+      obj.add(plank); obj.userData.localY = 2
+    }
+    obj.traverse((o) => { if (o.isMesh) { o.castShadow = !ghost; o.receiveShadow = !ghost } })
+    return obj
+  }
+
+  _buildPlacement() {
+    const p = this.player.position
+    const baseY = Math.max(0, Math.round(p.y / 4) * 4)
+    const fwd = new THREE.Vector3(Math.sin(this.player.yaw), 0, Math.cos(this.player.yaw))
+    const tx = Math.round((p.x + fwd.x * 4) / 4) * 4
+    const tz = Math.round((p.z + fwd.z * 4) / 4) * 4
+    const yawSnap = Math.round(this.player.yaw / (Math.PI / 2)) * (Math.PI / 2)
+    return { tx, tz, baseY, yawSnap }
+  }
+
+  _updateBuildGhost() {
+    if (!this.buildMode) return
+    if (!this._buildGhost || this._buildGhostPiece !== this.buildPiece) {
+      if (this._buildGhost) this.world.scene.remove(this._buildGhost)
+      this._buildGhost = this._makePiece(this.buildPiece, true)
+      this._buildGhostPiece = this.buildPiece
+      this.world.scene.add(this._buildGhost)
+    }
+    const { tx, tz, baseY, yawSnap } = this._buildPlacement()
+    const g = this._buildGhost
+    g.visible = true
+    g.position.set(tx, baseY + g.userData.localY, tz)
+    g.rotation.y = yawSnap
+  }
+
+  _placeBuild() {
+    if (!this.buildMode) return
+    const { tx, tz, baseY, yawSnap } = this._buildPlacement()
+    const obj = this._makePiece(this.buildPiece, false)
+    obj.position.set(tx, baseY + obj.userData.localY, tz)
+    obj.rotation.y = yawSnap
+    this.world.scene.add(obj)
+    const wb = new THREE.Box3().setFromObject(obj)
+    const plat = {
+      minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z,
+      top: wb.max.y, bottom: wb.min.y, climbable: this.buildPiece !== 'wall',
+    }
+    this.world.platforms.push(plat)
+    const obstacle = { mesh: obj, radius: 2, x: tx, z: tz }
+    this.world.obstacles.push(obstacle)
+    this._builds = this._builds || []
+    this._builds.push({ obj, plat, obstacle })
+    this.audio?.pickup?.()
+    this.particles?.emit({ x: tx, y: baseY + 1, z: tz }, 8, { color: [0.5, 0.8, 1], speed: 3, spread: 2, size: 0.8, life: 0.4, up: 2 })
   }
 
   throwGrenade() {
