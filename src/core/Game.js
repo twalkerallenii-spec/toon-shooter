@@ -485,7 +485,11 @@ export class Game {
     s.xp = (s.xp || 0) + (won ? 300 : 120) + k * 20
     localStorage.setItem('ts_stats', JSON.stringify(s))
     // Coins: earn from kills + a win bonus.
-    this._setCoins(this._coins() + k * 10 + (won ? 100 : 25))
+    const coinGain = k * 10 + (won ? 100 : 25)
+    this._setCoins(this._coins() + coinGain)
+    // Stash this match's recap for the end screen.
+    const deaths = this.net ? (this.deaths || 0) : (this.player?.alive ? 0 : 1)
+    this._summary = { kills: k, deaths, kd: (k / Math.max(1, deaths)).toFixed(2), xp: (won ? 300 : 120) + k * 20, coins: coinGain, won }
     this._populateLobby() // refresh lobby stats immediately (even on Play Again)
   }
 
@@ -1288,6 +1292,7 @@ export class Game {
       this.state = STATE.DEAD
       if (!this.input.isTouch) this.input.exitLock()
       this._recordMatch(false)
+      this.hud.showMatchSummary(this._summary)
       this.hud.showPause('ELIMINATED', `Kills: ${this.kills}.`, 'PLAY AGAIN')
       return
     }
@@ -1329,9 +1334,9 @@ export class Game {
   _winMatch(title, sub, win = true) {
     this.state = STATE.DEAD
     if (!this.input.isTouch) this.input.exitLock()
-    const earned = (this.kills || this.enemyKills || 0) * 10 + (win ? 100 : 25)
     this._recordMatch(win)
-    this.hud.showVictory(title, `${sub}   ·   +${earned} ◆ earned`, win)
+    this.hud.showMatchSummary(this._summary)
+    this.hud.showVictory(title, sub, win)
   }
 
   _onWin(msg) {
@@ -1530,6 +1535,7 @@ export class Game {
   pause() {
     if (this.state !== STATE.PLAYING) return
     this.state = STATE.PAUSED
+    this.hud.showMatchSummary(null) // no recap on a normal pause
     this.hud.showPause('PAUSED', 'Click to lock the mouse and keep fighting.', 'RESUME')
   }
 
@@ -1546,6 +1552,7 @@ export class Game {
     this.state = STATE.DEAD
     this.input.exitLock()
     this._recordMatch(false)
+    this.hud.showMatchSummary(this._summary)
     this.hud.showPause('YOU FELL', `Wave ${this.spawner.wave}. Score: ${this.score}.`, 'PLAY AGAIN')
   }
 

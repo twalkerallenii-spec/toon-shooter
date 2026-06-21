@@ -186,6 +186,17 @@ body {
 #drop-btn:hover { background: rgba(220,60,80,0.45); }
 @media (max-width: 900px) { #drop-btn { left: auto; right: 12px; bottom: 90px; transform: none; } }
 
+/* Match summary on end screens */
+.match-summary { display: flex; flex-direction: column; gap: 6px; margin: 14px auto 18px; width: 260px; max-width: 80vw; }
+.match-summary:empty { display: none; }
+.match-summary .ms-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px; padding: 8px 12px; font-size: 14px;
+}
+.match-summary .ms-row span { opacity: 0.75; letter-spacing: 1px; }
+.match-summary .ms-row b { font-size: 18px; color: var(--accent); }
+
 /* Live player count */
 #player-count { margin-top: 6px; font-size: 14px; font-weight: 700; color: #9fd0ff; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
 

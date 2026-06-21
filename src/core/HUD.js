@@ -240,6 +240,16 @@ export class HUD {
   }
   hideVictory() { this.el.victory.classList.add('hidden') }
 
+  // Per-match recap shown on the victory/defeat + death screens.
+  showMatchSummary(s) {
+    const html = s ? `
+      <div class="ms-row"><span>KILLS</span><b>${s.kills}</b></div>
+      <div class="ms-row"><span>K / D</span><b>${s.kd}</b></div>
+      <div class="ms-row"><span>XP GAINED</span><b>+${s.xp}</b></div>
+      <div class="ms-row"><span>COINS</span><b>+${s.coins} ◆</b></div>` : ''
+    document.querySelectorAll('.match-summary').forEach((el) => { el.innerHTML = html })
+  }
+
   showVoteToggle(on) {
     this.el.voteToggle.classList.toggle('hidden', !on)
     if (!on) this.el.votePanel.classList.add('hidden')
