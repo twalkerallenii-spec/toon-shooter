@@ -247,6 +247,11 @@ export class Game {
       if (this.state === STATE.PLAYING && !this.input.isTouch && !this.input.locked) this.input.requestLock()
     })
 
+    // Bank kills/XP if the player leaves mid-match (close, refresh, navigate away).
+    const saveOnExit = () => { if (this.state === STATE.PLAYING) this._recordMatch(false) }
+    window.addEventListener('pagehide', saveOnExit)
+    window.addEventListener('beforeunload', saveOnExit)
+
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR' && this.state === STATE.PLAYING) this.weapons.startReload()
       // TAB cycles through the weapons you actually have.
@@ -489,8 +494,18 @@ export class Game {
     this._setCoins(this._coins() + coinGain)
     // Stash this match's recap for the end screen.
     const deaths = this.net ? (this.deaths || 0) : (this.player?.alive ? 0 : 1)
-    this._summary = { kills: k, deaths, kd: (k / Math.max(1, deaths)).toFixed(2), xp: (won ? 300 : 120) + k * 20, coins: coinGain, won }
+    const xpGain = (won ? 300 : 120) + k * 20
+    this._summary = { kills: k, deaths, kd: (k / Math.max(1, deaths)).toFixed(2), xp: xpGain, coins: coinGain, won }
+    this._showSaving(k, xpGain, coinGain) // visible "saving kills & XP" confirmation
     this._populateLobby() // refresh lobby stats immediately (even on Play Again)
+  }
+
+  // Brief overlay confirming the match was banked to the browser.
+  _showSaving(kills, xp, coins) {
+    let el = document.getElementById('save-toast')
+    if (!el) { el = document.createElement('div'); el.id = 'save-toast'; document.body.appendChild(el) }
+    el.innerHTML = `<span class="st-spin">💾</span> SAVING…<small>+${kills} kills · +${xp} XP · +${coins} ◆</small>`
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show')
   }
 
   // ---- Economy: coins + owned skins (Store/Locker) ----------------------
