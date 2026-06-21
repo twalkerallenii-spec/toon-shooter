@@ -37,10 +37,10 @@ function mulberryLobby(a) {
 // Solo combat modes (vs bots) on the normal arena. Each is a small rule tweak.
 const SOLO_MODES = {
   ffa: { label: 'FFA DEATHMATCH', bots: 7, role: 'fighter', killTarget: 15, map: 'outpost' },
-  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, killTarget: 15, startWeapon: 0, map: 'rooftops' },
+  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, killTarget: 15, startWeapon: 0, map: 'outpost' },
   oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0, map: 'arena' },
   jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
-  infect: { label: 'INFECTION', bots: 10, role: 'zombie', survive: 90, map: 'rooftops' },
+  infect: { label: 'INFECTION', infect: true, bots: 10, startZombies: 2, map: 'outpost' },
 }
 
 export class Game {
@@ -505,12 +505,21 @@ export class Game {
     this.flags = this.ctfMode ? new Flags(this.world) : null
     this.ctf = null
     if (this.ctfMode) this._initLocalCtf(); else this.localCtf = null
+    this.infectMode = !!this.modeCfg?.infect
+    this.playerZombie = false
+    this.player.isZombie = false
+    this.player.team = null
+    this.hud.setZombie?.(false)
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
     // Apply combat-mode tweaks.
     if (this.modeCfg?.lowHp) { this.player.maxHp = 1; this.player.hp = 1 }
-    if (this.modeCfg?.startWeapon != null) this.weapons.index = this.modeCfg.startWeapon
+    // Fortnite-style: spawn with just a pistol + knife and loot the rest.
+    const loadout = [0, 11] // Pistol, Knife
+    if (this.modeCfg?.startWeapon != null && !loadout.includes(this.modeCfg.startWeapon)) loadout.push(this.modeCfg.startWeapon)
+    this.weapons.setLoadout(loadout)
+    this.weapons.index = this.modeCfg?.startWeapon ?? 0
     this._prevHp = this.player.maxHp
     this._deadHandled = false
     this._lastAttacker = null
@@ -523,6 +532,7 @@ export class Game {
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
         : type === 'health' ? '+35 Health' : type === 'shield' ? '+50 Shield' : 'Ammo refilled'
       this.hud.addKillFeed(`🟢 ${label}`)
+      if (type === 'weapon') this.hud.setOwned(this.weapons.owned)
     }
     this.hud.clearKillFeed()
     this.hud.setStorm(false)
@@ -564,6 +574,7 @@ export class Game {
     this.hud.setScore(0)
     this.hud.setWave(1)
     this.hud.initWeapons(this.weapons.defs)
+    this.hud.setOwned(this.weapons.owned)
     this.hud.setWeapon(this.weapons.def, this.weapons.index)
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
     this.hud.setReloading(false)
@@ -610,10 +621,12 @@ export class Game {
         this.pickups.spawn(type, Math.cos(a) * r, Math.sin(a) * r)
       }
     }
+    // Every mode scatters weapon loot now (all guns are pickups).
     if (this.brMode) {
-      this.pickups.scatterWeapons(this.weapons.defs, 20, HALF)
+      this.pickups.scatterWeapons(this.weapons.defs, 22, HALF)
       drop('shield', 7); drop('health', 7); drop('ammo', 6)
-    } else if (this.modeCfg || this.hnsMode) {
+    } else {
+      this.pickups.scatterWeapons(this.weapons.defs, 16, HALF)
       drop('health', 6); drop('shield', 5); drop('ammo', 6)
     }
 
@@ -623,6 +636,7 @@ export class Game {
     else if (this.ctfMode) await this._spawnCtfBots()
     else if (this.modeCfg) {
       if (this.modeCfg.jugg) await this._spawnJuggernaut()
+      else if (this.modeCfg.infect) await this._spawnInfectBots(this.modeCfg.bots || 10, this.modeCfg.startZombies || 2)
       else await this._spawnBots(this.modeCfg.bots || 7, this.modeCfg.role || 'fighter')
     }
     this.hud.setLoading('FINALIZING…', 96)
@@ -654,6 +668,53 @@ export class Game {
     await Promise.all(ready)
   }
 
+  // Infection: a couple of starting zombies (green, knife only) hunt the human
+  // survivors; anyone stabbed to death turns. Last human standing wins.
+  async _spawnInfectBots(count, startZombies) {
+    this.player.team = 'human'
+    this.playerZombie = false
+    const NAMES = ['Ace', 'Blaze', 'Cyborg', 'Drift', 'Echo', 'Fang', 'Ghost', 'Havoc', 'Iris', 'Jolt', 'Kilo', 'Lynx']
+    const HALF = this.world.arenaRadius
+    const chars = ['Character_Soldier', 'Character_Hazmat', 'Character_Enemy']
+    const ready = []
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + 0.3
+      const r = HALF * (0.35 + Math.random() * 0.5)
+      const pos = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)
+      const isZombie = i < startZombies
+      const bot = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: NAMES[i % NAMES.length], position: pos, role: isZombie ? 'zombie' : 'fighter', team: isZombie ? null : 'human', char: `models/characters/${chars[i % chars.length]}.gltf` })
+      bot.onDeath = (b, attacker) => this._onBotDeath(b, attacker)
+      if (isZombie && bot.ready) bot.ready.then(() => applyTint(bot.group, 0x55dd55))
+      if (bot.ready) ready.push(bot.ready)
+      this.bots.push(bot)
+    }
+    await Promise.all(ready)
+  }
+
+  // Turn a human bot into a zombie (green, knife-melee AI) without killing it.
+  _infectBot(bot) {
+    bot.alive = true; bot.dying = false; bot.removeTimer = 0
+    bot.role = 'zombie'; bot.team = null; bot.hp = bot.maxHp; bot.tag.visible = true
+    bot.objective = null; bot.forceGoal = null; bot.carrying = null
+    applyTint(bot.group, 0x55dd55)
+    bot.animator?.play?.('Idle', { fade: 0.1 })
+    this.hud.addKillFeed(`🧟 ${bot.name} got infected!`)
+  }
+
+  // The player got stabbed to death → respawn as a knife-only zombie.
+  _infectPlayer() {
+    this.playerZombie = true
+    this.player.isZombie = true
+    this.player.alive = true
+    this.player.hp = this.player.maxHp
+    this.player.team = null
+    this.weapons.setLoadout([11]) // knife only
+    this.weapons.switchTo(11)
+    this.hud.setOwned(this.weapons.owned)
+    this.hud.setZombie?.(true)
+    this.hud.addKillFeed('🧟 YOU WERE INFECTED — hunt the survivors! (knife only)')
+  }
+
   async _spawnJuggernaut() {
     const pos = new THREE.Vector3(0, 0, -this.world.arenaRadius * 0.4)
     const jug = new Bot({ world: this.world, assets: this.assets, fx: this.weapons, name: 'JUGGERNAUT', position: pos, role: 'fighter', hp: 1600, scale: 2.0 })
@@ -682,6 +743,12 @@ export class Game {
   }
 
   _onBotDeath(bot, attacker) {
+    // Infection: a human stabbed to death by a zombie (bot or zombie-player)
+    // converts instead of dying.
+    if (this.infectMode && bot.role === 'fighter') {
+      const byZombie = attacker ? attacker.role === 'zombie' : this.playerZombie
+      if (byZombie) { this._infectBot(bot); return }
+    }
     const killer = attacker ? attacker.name : (this._selfName || 'You')
     this.hud.addKillFeed(`${killer} ▸ ${bot.name}`)
     if (attacker && attacker.kills != null) attacker.kills++
@@ -695,8 +762,8 @@ export class Game {
           const d = this.weapons.defs[i]; return !d.tool && !d.melee
         })
         const idx = pool[Math.floor(Math.random() * pool.length)]
-        this.weapons.ammoByWeapon[idx] = this.weapons.defs[idx].mag
-        this.weapons.switchTo(idx)
+        this.weapons.give(idx)
+        this.hud.setOwned(this.weapons.owned)
       }
     }
   }
@@ -1123,7 +1190,7 @@ export class Game {
         const fp = flagPos(enemy)
         if (dist2(P.position.x, P.position.z, fp.x, fp.z) < 3) { ef.state = 'carried'; ef.holder = P; this.hud.addKillFeed('🚩 You grabbed the RED flag!') }
       }
-      if (ef.holder === P && mf.state === 'home' && dist2(P.position.x, P.position.z, home[mine].x, home[mine].z) < 5.5) {
+      if (ef.holder === P && dist2(P.position.x, P.position.z, home[mine].x, home[mine].z) < 5.5) {
         lc.scores.blue++; ef.state = 'home'; ef.holder = null
         this.hud.addKillFeed(`🏁 You captured! BLUE ${lc.scores.blue}`)
       }
@@ -1137,7 +1204,7 @@ export class Game {
       const of = lc.flags[ot], ownf = lc.flags[bt]
       if (bot.carrying) {
         bot.forceGoal = home[bt]
-        if (ownf.state === 'home' && dist2(bot.position.x, bot.position.z, home[bt].x, home[bt].z) < 5.5) {
+        if (dist2(bot.position.x, bot.position.z, home[bt].x, home[bt].z) < 5.5) {
           lc.scores[bt]++; of.state = 'home'; of.holder = null
           bot.carrying = null; bot.forceGoal = null; bot.objective = null
           this.hud.addKillFeed(`🏴 ${bot.name} captured the ${ot.toUpperCase()} flag!`)
@@ -1421,6 +1488,14 @@ export class Game {
         if (this.kills >= cfg.killTarget) { this._matchOver = true; this._winMatch('VICTORY', `${cfg.killTarget} eliminations!`) }
       } else if (cfg.jugg) {
         if (this.jugg && !this.jugg.alive) { this._matchOver = true; this._winMatch('JUGGERNAUT DOWN', 'You took down the juggernaut!') }
+      } else if (cfg.infect) {
+        const humanBots = this.bots.filter((b) => b.alive && b.role === 'fighter').length
+        const zombies = this.bots.filter((b) => b.alive && b.role === 'zombie').length + (this.playerZombie ? 1 : 0)
+        const humans = humanBots + (this.playerZombie ? 0 : 1)
+        this.hud.setStormTimer(`🧟 INFECTION   Survivors: ${humans}   Zombies: ${zombies}`)
+        if (zombies === 0) { this._matchOver = true; this._winMatch('SURVIVORS WIN', 'Every zombie was eliminated!', !this.playerZombie) }
+        else if (humans === 0) { this._matchOver = true; this._winMatch('INFECTION COMPLETE', 'Everyone was turned.', false) }
+        else if (humans === 1) { this._matchOver = true; const won = !this.playerZombie; this._winMatch(won ? 'LAST SURVIVOR' : 'INFECTED', won ? 'You were the last one standing!' : 'A survivor outlasted you.', won) }
       }
     }
 
@@ -1499,7 +1574,8 @@ export class Game {
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
 
     if (!this.player.alive && this.state === STATE.PLAYING) {
-      if (this.net) this._handleMpDeath()
+      if (this.infectMode && !this.playerZombie) this._infectPlayer() // stabbed → turn
+      else if (this.net) this._handleMpDeath()
       else this.gameOver()
     }
 

@@ -88,6 +88,7 @@ export class Bot {
     this.removeTimer = 2.0
     this.tag.visible = false
     this.onDeath?.(this, attacker)
+    if (!this.dying) return // onDeath revived us (e.g. infected into a zombie)
     if (this.animator?.has('Death')) this.animator.play('Death', { once: true, fade: 0.1 })
   }
 
@@ -134,6 +135,7 @@ export class Bot {
       let tgt = null, bd = 200
       for (const c of ctx.combatants) {
         if (c === this || !c.alive) continue
+        if (c.role === 'zombie' || c.isZombie) continue // zombies only hunt humans
         const d = Math.hypot(c.position.x - p3.x, c.position.z - p3.z)
         if (d < bd) { bd = d; tgt = c }
       }

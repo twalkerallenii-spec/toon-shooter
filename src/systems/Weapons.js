@@ -2,19 +2,19 @@ import * as THREE from 'three'
 
 // Weapon roster (Toon Shooter Game Kit guns). `model` maps to models/guns/<>.gltf.
 export const WEAPONS = [
-  { key: 'Pistol',  model: 'Pistol',  damage: 26, fireRate: 6,  mag: 14, spread: 0.012, pellets: 1, auto: false, range: 200, reload: 1.0, adsFov: 55, recoil: 0.05 },
-  { key: 'AK',      model: 'AK',      damage: 30, fireRate: 9,  mag: 30, spread: 0.022, pellets: 1, auto: true,  range: 220, reload: 1.4, adsFov: 50, recoil: 0.05 },
-  { key: 'SMG',     model: 'SMG',     damage: 17, fireRate: 14, mag: 30, spread: 0.030, pellets: 1, auto: true,  range: 160, reload: 1.3, adsFov: 55, recoil: 0.035 },
-  { key: 'Shotgun', model: 'Shotgun', damage: 13, fireRate: 1.4, mag: 6, spread: 0.085, pellets: 10, auto: false, range: 140, reload: 0.9, adsFov: 60, recoil: 0.12 },
-  { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16, tracer: 0x9fe7ff },
-  { key: 'Revolver', model: 'Revolver', label: 'Revolver', damage: 55, fireRate: 3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 220, reload: 1.3, adsFov: 52, recoil: 0.12, tracer: 0xffd24a },
-  { key: 'Minigun', model: 'ShortCannon', label: 'Minigun', damage: 13, fireRate: 18, mag: 80, spread: 0.04, pellets: 1, auto: true, range: 200, reload: 3.0, adsFov: 60, recoil: 0.03, tracer: 0xff7a3d },
-  { key: 'DMR',     model: 'Sniper_2', label: 'Marksman', damage: 72, fireRate: 3.5, mag: 10, spread: 0.006, pellets: 1, auto: false, range: 320, reload: 1.6, adsFov: 38, recoil: 0.1, tracer: 0xbfffe0 },
-  { key: 'Burst',   model: 'Knife_2', label: 'Burst Rifle', damage: 22, fireRate: 16, mag: 24, spread: 0.018, pellets: 1, auto: true, range: 190, reload: 1.4, adsFov: 52, recoil: 0.045, tracer: 0xffe0a0 },
-  { key: 'GL',      model: 'GrenadeLauncher', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
-  { key: 'RPG',     model: 'RocketLauncher', label: 'Rocket Launcher', damage: 0, fireRate: 0.7, mag: 2, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.6, adsFov: 62, recoil: 0.24, projectile: 'rocket' },
-  { key: 'Knife',   model: 'Knife_1', label: 'Knife', damage: 75, fireRate: 2.4, mag: 99, spread: 0, pellets: 1, auto: false, range: 4.5, reload: 0.1, adsFov: 70, recoil: 0.06, tracer: 0xffffff, melee: true },
-  { key: 'Zip',     model: 'Pistol', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
+  { key: 'Pistol',  model: 'Pistol',  ico: '🔫', rarity: 'common', damage: 26, fireRate: 6,  mag: 14, spread: 0.012, pellets: 1, auto: false, range: 200, reload: 1.0, adsFov: 55, recoil: 0.05 },
+  { key: 'AK',      model: 'AK',      ico: '🔫', rarity: 'rare', damage: 30, fireRate: 9,  mag: 30, spread: 0.022, pellets: 1, auto: true,  range: 220, reload: 1.4, adsFov: 50, recoil: 0.05 },
+  { key: 'SMG',     model: 'SMG',     ico: '🔫', rarity: 'uncommon', damage: 17, fireRate: 14, mag: 30, spread: 0.030, pellets: 1, auto: true,  range: 160, reload: 1.3, adsFov: 55, recoil: 0.035 },
+  { key: 'Shotgun', model: 'Shotgun', ico: '💥', rarity: 'uncommon', damage: 13, fireRate: 1.4, mag: 6, spread: 0.085, pellets: 10, auto: false, range: 140, reload: 0.9, adsFov: 60, recoil: 0.12 },
+  { key: 'Sniper',  model: 'Sniper',  ico: '🎯', rarity: 'epic', damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16, tracer: 0x9fe7ff },
+  { key: 'Revolver', model: 'Revolver', ico: '🔫', rarity: 'rare', label: 'Revolver', damage: 55, fireRate: 3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 220, reload: 1.3, adsFov: 52, recoil: 0.12, tracer: 0xffd24a },
+  { key: 'Minigun', model: 'ShortCannon', ico: '🌀', rarity: 'legendary', label: 'Minigun', damage: 13, fireRate: 18, mag: 80, spread: 0.04, pellets: 1, auto: true, range: 200, reload: 3.0, adsFov: 60, recoil: 0.03, tracer: 0xff7a3d },
+  { key: 'DMR',     model: 'Sniper_2', ico: '🎯', rarity: 'rare', label: 'Marksman', damage: 72, fireRate: 3.5, mag: 10, spread: 0.006, pellets: 1, auto: false, range: 320, reload: 1.6, adsFov: 38, recoil: 0.1, tracer: 0xbfffe0 },
+  { key: 'Burst',   model: 'Knife_2', ico: '🔫', rarity: 'uncommon', label: 'Burst Rifle', damage: 22, fireRate: 16, mag: 24, spread: 0.018, pellets: 1, auto: true, range: 190, reload: 1.4, adsFov: 52, recoil: 0.045, tracer: 0xffe0a0 },
+  { key: 'GL',      model: 'GrenadeLauncher', ico: '🧨', rarity: 'epic', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
+  { key: 'RPG',     model: 'RocketLauncher', ico: '🚀', rarity: 'legendary', label: 'Rocket Launcher', damage: 0, fireRate: 0.7, mag: 2, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.6, adsFov: 62, recoil: 0.24, projectile: 'rocket' },
+  { key: 'Knife',   model: 'Knife_1', ico: '🔪', rarity: 'common', label: 'Knife', damage: 75, fireRate: 2.4, mag: 99, spread: 0, pellets: 1, auto: false, range: 4.5, reload: 0.1, adsFov: 70, recoil: 0.06, tracer: 0xffffff, melee: true },
+  { key: 'Zip',     model: 'Pistol', ico: '🪝', rarity: 'uncommon', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
 ]
 
 // Hitscan shooting for a roster of weapons + lightweight combat FX (tracers,
@@ -30,6 +30,7 @@ export class Weapons {
     this.defs = WEAPONS
     this.index = 1 // start on the AK
     this.ammoByWeapon = this.defs.map((d) => d.mag)
+    this.owned = new Set(this.defs.map((_, i) => i)) // which weapons you carry
 
     this._cooldown = 0
     this._reloading = 0
@@ -49,6 +50,7 @@ export class Weapons {
 
   switchTo(i) {
     if (i < 0 || i >= this.defs.length || i === this.index) return
+    if (!this.owned.has(i)) return // can't equip a weapon you haven't picked up
     this.index = i
     this._reloading = 0
     this._cooldown = Math.max(this._cooldown, 0.15)
@@ -56,8 +58,28 @@ export class Weapons {
   }
 
   cycle(dir) {
-    const n = this.defs.length
-    this.switchTo((this.index + (dir > 0 ? 1 : -1) + n) % n)
+    // Cycle only through owned weapons (in roster order).
+    const list = [...this.owned].sort((a, b) => a - b)
+    if (!list.length) return
+    let pos = list.indexOf(this.index)
+    if (pos < 0) pos = 0
+    const next = list[(pos + (dir > 0 ? 1 : -1) + list.length) % list.length]
+    this.switchTo(next)
+  }
+
+  // Restrict the carried set to a starting loadout (Fortnite-style: loot the rest).
+  setLoadout(indices) {
+    this.owned = new Set(indices)
+    for (const i of indices) this.ammoByWeapon[i] = this.defs[i].mag
+    if (!this.owned.has(this.index)) this.index = indices[0] ?? 0
+  }
+
+  // Pick up a weapon: add it to the carried set, refill its mag, and equip it.
+  give(i, equip = true) {
+    if (i < 0 || i >= this.defs.length) return
+    this.owned.add(i)
+    this.ammoByWeapon[i] = this.defs[i].mag
+    if (equip) { this.index = -1; this.switchTo(i) }
   }
 
   startReload() {

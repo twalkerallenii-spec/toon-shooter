@@ -111,18 +111,35 @@ export class HUD {
     this.el.reloadHint.classList.toggle('hidden', !on)
   }
 
-  // Build the bottom weapon strip once from the roster.
+  // Build the Fortnite-style weapon hotbar once from the roster.
   initWeapons(defs) {
     this.el.weaponList.innerHTML = defs
-      .map((d, i) => `<span class="wpn" data-i="${i}"><b>${i + 1}</b>${d.key}</span>`)
+      .map((d, i) => `<div class="wpn rar-${d.rarity || 'common'}" data-i="${i}">
+        <span class="wpn-slot">${i + 1}</span>
+        <span class="wpn-ico">${d.ico || '🔫'}</span>
+        <span class="wpn-key">${d.key}</span>
+      </div>`)
       .join('')
     this._wpnEls = [...this.el.weaponList.querySelectorAll('.wpn')]
+  }
+
+  // Mark which slots are owned (picked up) vs locked.
+  setOwned(owned) {
+    if (!this._wpnEls) return
+    this._wpnEls.forEach((el, i) => el.classList.toggle('locked', !owned.has(i)))
+  }
+
+  // Green full-screen tint while the player is a zombie (Infection).
+  setZombie(on) {
+    document.getElementById('zombie-tint')?.classList.toggle('on', !!on)
   }
 
   setWeapon(def, index) {
     this.el.weaponName.textContent = def.label || def.key
     if (this._wpnEls) {
       this._wpnEls.forEach((el, i) => el.classList.toggle('active', i === index))
+      // Keep the active slot scrolled into view (the bar can be wider than screen).
+      this._wpnEls[index]?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
     }
   }
 

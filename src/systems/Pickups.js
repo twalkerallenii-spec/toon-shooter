@@ -105,8 +105,7 @@ export class Pickups {
         } else if (it.type === 'ammo') {
           weapons.ammoByWeapon = weapons.defs.map((wd) => wd.mag); took = true
         } else if (it.type === 'weapon') {
-          weapons.ammoByWeapon[it.wIndex] = weapons.defs[it.wIndex].mag
-          weapons.switchTo(it.wIndex); took = true
+          weapons.give(it.wIndex); took = true
         } else if (it.type === 'shield' && player.shield < 100) {
           player.shield = Math.min(100, player.shield + 50); took = true
         }

@@ -139,22 +139,50 @@ body {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
-/* Weapon switcher strip (bottom-center) */
+/* Fortnite-style weapon hotbar (bottom-center) */
 #weapon-list {
-  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 8px;
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 6px; max-width: 96vw; overflow-x: auto;
+  padding: 4px; scrollbar-width: none;
 }
+#weapon-list::-webkit-scrollbar { display: none; }
 #weapon-list .wpn {
-  font-size: 13px; letter-spacing: 1px;
-  padding: 4px 10px; border-radius: 8px;
-  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.6);
+  position: relative; flex: 0 0 auto;
+  width: 60px; height: 58px; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(40,46,66,0.9), rgba(16,20,34,0.92));
+  border: 2px solid var(--rar, #b0b8c0);
+  box-shadow: inset 0 -14px 18px -10px var(--rar, #b0b8c0);
+  transition: transform 0.1s ease, filter 0.1s ease;
 }
-#weapon-list .wpn b { color: rgba(255, 255, 255, 0.45); margin-right: 5px; }
+#weapon-list .wpn .wpn-slot {
+  position: absolute; top: 2px; left: 5px; font-size: 11px; font-weight: 800;
+  color: rgba(255,255,255,0.75); text-shadow: 0 1px 2px #000;
+}
+#weapon-list .wpn .wpn-ico { font-size: 24px; line-height: 1; margin-top: 6px; filter: drop-shadow(0 1px 2px #000); }
+#weapon-list .wpn .wpn-key { font-size: 9px; letter-spacing: 0.5px; opacity: 0.85; margin-top: 3px; max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Rarity accent colors */
+#weapon-list .wpn.rar-common { --rar: #b0b8c0; }
+#weapon-list .wpn.rar-uncommon { --rar: #5ac24a; }
+#weapon-list .wpn.rar-rare { --rar: #3da9fc; }
+#weapon-list .wpn.rar-epic { --rar: #b06aff; }
+#weapon-list .wpn.rar-legendary { --rar: #ffb33d; }
+/* Locked (not yet picked up) */
+#weapon-list .wpn.locked { filter: grayscale(1) brightness(0.45); opacity: 0.5; }
+/* Active (equipped) pops up */
 #weapon-list .wpn.active {
-  background: rgba(255, 203, 61, 0.2); border-color: var(--accent); color: #fff;
+  transform: translateY(-8px) scale(1.12);
+  box-shadow: inset 0 -16px 20px -10px var(--rar, #fff), 0 0 16px var(--rar, #fff);
+  filter: none;
 }
-#weapon-list .wpn.active b { color: var(--accent); }
+
+/* Zombie player tint (Infection) */
+#zombie-tint {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  transition: opacity 0.4s ease; mix-blend-mode: screen;
+  background: radial-gradient(ellipse at center, rgba(40,220,60,0.05) 40%, rgba(20,180,40,0.35) 100%);
+}
+#zombie-tint.on { opacity: 1; }
 
 /* Mode selector (co-op / deathmatch) */
 .mode-options { display: flex; gap: 8px; flex-wrap: wrap; }
