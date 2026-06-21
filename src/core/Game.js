@@ -43,6 +43,8 @@ const SOLO_MODES = {
   jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
   infect: { label: 'INFECTION', infect: true, bots: 9, startZombies: 3, map: 'outpost' },
   koth: { label: 'KING OF THE HILL', koth: true, bots: 7, role: 'fighter', map: 'arena' },
+  dom: { label: 'DOMINATION', dom: true, bots: 8, role: 'fighter', map: 'outpost' },
+  snd: { label: 'SEARCH & DESTROY', snd: true, bots: 6, role: 'fighter', oneLife: true, map: 'outpost' },
 }
 
 export class Game {
@@ -684,6 +686,11 @@ export class Game {
     this.kothMode = !!this.modeCfg?.koth
     this.kothYou = 0; this.kothEnemy = 0
     this.hillRadius = 8
+    this.domMode = !!this.modeCfg?.dom
+    this.domYou = 0; this.domEnemy = 0; this._domPoints = []
+    this.sndMode = !!this.modeCfg?.snd
+    this._sndSite = null
+    this._snd = this.sndMode ? { state: 'arming', plantT: 0, defuseT: 0, timer: 30 } : null
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
@@ -800,16 +807,13 @@ export class Game {
         this.pickups.spawn(type, Math.cos(a) * r, Math.sin(a) * r)
       }
     }
-    // Loot chests can drop any weapon — give Pickups the weapon table.
+    // ALL weapons come from loot chests now — no floating gun pickups.
     this.pickups.weaponDefs = this.weapons.defs
     const chests = (n) => { for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * (HALF - 16); this.pickups.spawnChest(Math.cos(a) * r, Math.sin(a) * r) } }
-    // Every mode scatters weapon loot now (all guns are pickups).
     if (this.brMode) {
-      this.pickups.scatterWeapons(this.weapons.defs, 22, HALF)
-      drop('shield', 7); drop('health', 7); drop('ammo', 6); chests(12)
+      drop('shield', 7); drop('health', 7); drop('ammo', 6); chests(20)
     } else {
-      this.pickups.scatterWeapons(this.weapons.defs, 16, HALF)
-      drop('health', 6); drop('shield', 5); drop('ammo', 6); chests(7)
+      drop('health', 6); drop('shield', 5); drop('ammo', 6); chests(14)
     }
 
     // CPU players fill the match (online or offline) for bot modes.
@@ -838,6 +842,43 @@ export class Game {
       disc.rotation.x = Math.PI / 2; disc.position.y = 0.12
       this.world.scene.add(disc)
       this.bots.forEach((b) => { b.objective = { x: 0, z: 0 } }) // bots fight over the hill
+    }
+
+    // Domination: three capture points (A/B/C). Hold them to tick score.
+    if (this.domMode) {
+      this._domPoints = []
+      const R = this.world.arenaRadius * 0.52
+      const names = ['A', 'B', 'C']
+      for (let i = 0; i < 3; i++) {
+        const ang = -Math.PI / 2 + i * (Math.PI * 2 / 3)
+        const x = Math.cos(ang) * R, z = Math.sin(ang) * R
+        const ring = new THREE.Mesh(
+          new THREE.CylinderGeometry(6, 6, 0.3, 36, 1, true),
+          new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })
+        )
+        ring.position.set(x, 1.4, z); this.world.scene.add(ring)
+        const disc = new THREE.Mesh(new THREE.TorusGeometry(6, 0.16, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffd24a }))
+        disc.rotation.x = Math.PI / 2; disc.position.set(x, 0.12, z); this.world.scene.add(disc)
+        const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.pickups._iconTex(names[i]), depthTest: false, transparent: true }))
+        spr.scale.set(2.4, 2.4, 1); spr.position.set(x, 4, z); spr.renderOrder = 990; this.world.scene.add(spr)
+        this._domPoints.push({ x, z, name: names[i], owner: null, mesh: ring, disc })
+      }
+      this.bots.forEach((b, i) => { b.objective = { x: this._domPoints[i % 3].x, z: this._domPoints[i % 3].z } })
+    }
+
+    // Search & Destroy: a single bomb site to plant/defend.
+    if (this.sndMode) {
+      const R = this.world.arenaRadius * 0.45
+      const ang = Math.PI * 0.25
+      const x = Math.cos(ang) * R, z = Math.sin(ang) * R
+      const ring = new THREE.Mesh(
+        new THREE.CylinderGeometry(5, 5, 0.3, 32, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0xff9f1c, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false })
+      )
+      ring.position.set(x, 1.4, z); this.world.scene.add(ring)
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.pickups._iconTex('💣'), depthTest: false, transparent: true }))
+      spr.scale.set(2.6, 2.6, 1); spr.position.set(x, 4, z); spr.renderOrder = 990; this.world.scene.add(spr)
+      this._sndSite = { x, z, mesh: ring }
     }
     this.hud.setLoading('FINALIZING…', 96)
   }
@@ -1410,13 +1451,14 @@ export class Game {
         this.net.sendFlagDrop(enemyColor, this.player.position.x, this.player.position.z)
       }
     }
-    // Battle royale = no respawn; you're eliminated.
-    if (this.brMode) {
+    // Battle royale + Search & Destroy = one life, no respawn.
+    if (this.brMode || this.modeCfg?.oneLife) {
       this.state = STATE.DEAD
       if (!this.input.isTouch) this.input.exitLock()
+      this._matchOver = true
       this._recordMatch(false)
       this.hud.showMatchSummary(this._summary)
-      this.hud.showPause('ELIMINATED', `Kills: ${this.kills}.`, 'PLAY AGAIN')
+      this.hud.showPause(this.brMode ? 'ELIMINATED' : 'YOU DIED', `Kills: ${this.kills}.`, 'PLAY AGAIN')
       return
     }
     setTimeout(() => this._respawn(), 1800)
@@ -1849,6 +1891,54 @@ export class Game {
         if (this._hillMesh) this._hillMesh.material.color.setHex(youIn && botIn ? 0xff5a5a : youIn ? 0x4ade80 : botIn ? 0xff5a5a : 0xffd24a)
         if (this.kothYou >= 100) { this._matchOver = true; this._winMatch('HILL CONQUERED', 'You held the hill!') }
         else if (this.kothEnemy >= 100) { this._matchOver = true; this._winMatch('DEFEAT', 'The enemy held the hill.', false) }
+      } else if (cfg.dom) {
+        const R2 = 36 // 6u radius squared
+        let mine = 0, theirs = 0
+        for (const pt of this._domPoints) {
+          const youIn = this.player.alive && (this.player.position.x - pt.x) ** 2 + (this.player.position.z - pt.z) ** 2 < R2
+          const botIn = this.bots.some((b) => b.alive && (b.position.x - pt.x) ** 2 + (b.position.z - pt.z) ** 2 < R2)
+          if (youIn && !botIn) pt.owner = 'you'
+          else if (botIn && !youIn) pt.owner = 'enemy'
+          if (pt.owner === 'you') mine++; else if (pt.owner === 'enemy') theirs++
+          const col = (youIn && botIn) ? 0xffa500 : pt.owner === 'you' ? 0x4ade80 : pt.owner === 'enemy' ? 0xff5a5a : 0xffd24a
+          pt.mesh.material.color.setHex(col); pt.disc.material.color.setHex(col)
+        }
+        this.domYou += dt * mine * 5
+        this.domEnemy += dt * theirs * 5
+        const tag = this._domPoints.map((p) => p.name + (p.owner === 'you' ? '🟢' : p.owner === 'enemy' ? '🔴' : '⚪')).join(' ')
+        this.hud.setObjective('🚩 Capture and HOLD the points!')
+        this.hud.setStormTimer(`🚩 You ${Math.floor(this.domYou)} · Enemy ${Math.floor(this.domEnemy)} / 200    ${tag}`)
+        if (this.domYou >= 200) { this._matchOver = true; this._winMatch('DOMINATION', 'You dominated the map!') }
+        else if (this.domEnemy >= 200) { this._matchOver = true; this._winMatch('DEFEAT', 'The enemy dominated.', false) }
+      } else if (cfg.snd) {
+        const s = this._snd, st = this._sndSite, R2 = 25 // 5u radius squared
+        const youIn = this.player.alive && st && (this.player.position.x - st.x) ** 2 + (this.player.position.z - st.z) ** 2 < R2
+        const botIn = st && this.bots.some((b) => b.alive && (b.position.x - st.x) ** 2 + (b.position.z - st.z) ** 2 < R2)
+        const aliveBots = this.bots.filter((b) => b.alive).length
+        if (aliveBots === 0 && s.state !== 'done') {
+          s.state = 'done'; this._matchOver = true; this._winMatch('ENEMY ELIMINATED', 'You wiped out the defenders!')
+        } else if (s.state === 'arming') {
+          if (youIn) s.plantT += dt; else s.plantT = Math.max(0, s.plantT - dt * 0.5)
+          this.hud.setObjective('💣 Reach the site and PLANT the bomb (stand on it)')
+          this.hud.setStormTimer(youIn ? `💣 PLANTING…  ${Math.max(0, Math.ceil(2 - s.plantT))}` : `💣 Defenders: ${aliveBots}  —  get to the bomb site`)
+          if (s.plantT >= 2) {
+            s.state = 'planted'; s.timer = 30
+            this.hud.addKillFeed('💣 Bomb planted — defend it!')
+            if (st.mesh) st.mesh.material.color.setHex(0xff3030)
+            this.bots.forEach((b) => { b.forceGoal = { x: st.x, z: st.z } }) // rush to defuse
+          }
+        } else if (s.state === 'planted') {
+          s.timer -= dt
+          if (botIn) s.defuseT += dt; else s.defuseT = Math.max(0, s.defuseT - dt)
+          this.hud.setObjective('🛡️ DEFEND the bomb until it detonates!')
+          this.hud.setStormTimer(s.defuseT > 0.2 ? `⚠️ DEFUSING!  ${Math.max(0, Math.ceil(6 - s.defuseT))}` : `💣 ARMED  ⏱ ${Math.ceil(s.timer)}   Defenders: ${aliveBots}`)
+          if (s.defuseT >= 6) { s.state = 'done'; this._matchOver = true; this._winMatch('DEFEAT', 'The defenders defused the bomb.', false) }
+          else if (s.timer <= 0) {
+            s.state = 'done'; this._matchOver = true
+            if (st) this.particles.emit({ x: st.x, y: 1, z: st.z }, 80, { color: [1, 0.5, 0.1], speed: 14, spread: 3, size: 2.4, life: 1.1, gravity: 6, up: 6 })
+            this._winMatch('DETONATED!', 'The bomb went off — objective complete!')
+          }
+        }
       } else if (cfg.infect) {
         this._matchT = (this._matchT || 0) + dt
         const humanBots = this.bots.filter((b) => b.alive && b.role === 'fighter').length
