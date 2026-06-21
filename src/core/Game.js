@@ -1973,44 +1973,42 @@ export class Game {
     }
   }
 
-  // Super Gun projectile: a fast glowing blue energy orb with a particle trail
-  // that detonates in a big blue blast on contact. Duck-typed into this.grenades.
+  // Super Gun projectile: a giant glowing blue energy orb (3x) that PIERCES
+  // everything (walls included) and one-shots anything it passes through, leaving
+  // a heavy particle trail. Duck-typed into this.grenades.
   _fireEnergy(origin, dir) {
     const grp = new THREE.Group()
-    grp.add(new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), new THREE.MeshBasicMaterial({ color: 0x9fe0ff })))
-    grp.add(new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 16), new THREE.MeshBasicMaterial({ color: 0x2a88ff, transparent: true, opacity: 0.35, depthWrite: false })))
-    grp.add(new THREE.PointLight(0x44aaff, 3, 16))
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(1.35, 18, 18), new THREE.MeshBasicMaterial({ color: 0x9fe0ff })))
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(2.85, 18, 18), new THREE.MeshBasicMaterial({ color: 0x2a88ff, transparent: true, opacity: 0.3, depthWrite: false })))
+    grp.add(new THREE.PointLight(0x44aaff, 4, 30))
     grp.position.copy(origin)
     this.world.scene.add(grp)
-    const vel = dir.clone().multiplyScalar(72)
-    this._energyRay = this._energyRay || new THREE.Raycaster()
-    const ray = this._energyRay
+    const vel = dir.clone().multiplyScalar(80)
+    const KILL_R = 4.5 // wide one-shot radius around the orb
     const game = this
     const blast = {
-      pos: origin.clone(), prev: origin.clone(), life: 2.4, _t: 0, group: grp,
+      pos: origin.clone(), life: 3.0, _t: 0, group: grp,
       dispose() { if (grp.parent) grp.parent.remove(grp); grp.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() }) },
       update(dt) {
         this._t += dt
-        this.prev.copy(this.pos); this.pos.addScaledVector(vel, dt); grp.position.copy(this.pos)
+        this.pos.addScaledVector(vel, dt); grp.position.copy(this.pos)
         grp.children[0].scale.setScalar(1 + Math.sin(this._t * 30) * 0.12)
-        game.particles.emit(this.pos, 5, { color: [0.35, 0.7, 1], speed: 4, spread: 1.2, size: 1.3, life: 0.35, drag: 4 })
-        this.life -= dt
-        // Detonate on hitting the world, a combatant, the ground, or on timeout.
-        let hit = null
-        const seg = new THREE.Vector3().subVectors(this.pos, this.prev); const len = seg.length()
-        if (len > 0.001 && game.world.obstacles.length) {
-          ray.set(this.prev, seg.normalize()); ray.far = len
-          const hs = ray.intersectObjects(game.world.obstacles.map((o) => o.mesh), true)
-          if (hs.length) hit = hs[0].point
+        game.particles.emit(this.pos, 10, { color: [0.35, 0.7, 1], speed: 6, spread: 2.6, size: 3.0, life: 0.4, drag: 4 })
+        // Pierce + one-shot anything within range each frame (walls don't stop it).
+        for (const b of game.bots) {
+          if (b.alive && Math.hypot(b.position.x - this.pos.x, b.position.z - this.pos.z) < KILL_R) b.applyDamage?.(1e9, null)
         }
-        if (!hit) {
-          for (const t of [...game.bots, ...game.spawner.enemies]) {
-            const p = t.position || t.group.position
-            if (t.alive && Math.hypot(p.x - this.pos.x, p.z - this.pos.z) < 1.8) { hit = this.pos.clone(); break }
+        for (const e of game.spawner.enemies) {
+          if (e.alive && Math.hypot(e.group.position.x - this.pos.x, e.group.position.z - this.pos.z) < KILL_R) {
+            if (e.takeHit(1e9)) { game.score += 10; game.hud.setScore(game.score) }
           }
         }
-        if (hit || this.life <= 0 || this.pos.y < 0.3) {
-          game.explodeAt(hit || this.pos, { radius: 14, damage: 260, energy: true })
+        if (game.net) for (const rp of game.remotePlayers.values()) {
+          if (Math.hypot(rp.group.position.x - this.pos.x, rp.group.position.z - this.pos.z) < KILL_R) game.net.sendHit(rp.id, 1e9)
+        }
+        this.life -= dt
+        if (this.life <= 0 || this.pos.y < 0.2) {
+          game.explodeAt(this.pos, { radius: 14, damage: 1e9, energy: true })
           this.dispose(); return true
         }
         return false
