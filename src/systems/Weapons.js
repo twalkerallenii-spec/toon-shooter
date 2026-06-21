@@ -74,6 +74,14 @@ export class Weapons {
     if (!this.owned.has(this.index)) this.index = indices[0] ?? 0
   }
 
+  // Drop the weapon at index i (can't drop your last one). Returns true if dropped.
+  discard(i) {
+    if (!this.owned.has(i) || this.owned.size <= 1) return false
+    this.owned.delete(i)
+    if (this.index === i) { this.index = -1; this.switchTo([...this.owned].sort((a, b) => a - b)[0]) }
+    return true
+  }
+
   // Pick up a weapon: add it to the carried set, refill its mag, and equip it.
   give(i, equip = true) {
     if (i < 0 || i >= this.defs.length) return
@@ -165,10 +173,11 @@ export class Weapons {
           }
         }
       }
-      this.beam(start, endPoint, def.tracer || 0xfff2a8)
+      // Melee (knife) has no bullet/tracer — just a close-range slash.
+      if (!def.melee) this.beam(start, endPoint, def.tracer || 0xfff2a8)
     }
 
-    this.flash(start, 0xffd24a)
+    if (!def.melee) this.flash(start, 0xffd24a)
     if (this.ammo <= 0) this.startReload()
     return { fired: true, hit: hitEnemy, killed, barrel, playerHit, headshot, dmg: dmgDealt, hitPos }
   }

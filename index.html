@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Toon Shooter</title>
+    <title>Vertex</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1530'/%3E%3Cpolygon points='32,10 54,50 10,50' fill='none' stroke='%233da9fc' stroke-width='5' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='10' r='5' fill='%23ffcb3d'/%3E%3Ccircle cx='54' cy='50' r='5' fill='%23ff5aa0'/%3E%3Ccircle cx='10' cy='50' r='5' fill='%235ad1ff'/%3E%3C/svg%3E" />
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -44,6 +45,7 @@
         <div id="reload-hint" class="hidden">RELOADING…</div>
       </div>
       <div id="weapon-list"></div>
+      <button id="drop-btn" title="Discard current weapon (X)">🗑 DROP</button>
       <div id="killfeed"></div>
       <canvas id="minimap" width="170" height="170"></canvas>
       <div id="storm-warning" class="hidden">⚠ THE STORM IS DAMAGING YOU — GET TO THE ZONE</div>
@@ -90,7 +92,7 @@
     <div id="overlay">
       <!-- Top bar -->
       <div class="lobby-header">
-        <div class="logo">TOON&nbsp;SHOOTER</div>
+        <div class="logo">VERTEX</div>
         <div class="top-tabs">
           <span class="top-tab active" data-panel="play">PLAY</span>
           <span class="top-tab" data-panel="locker">LOCKER</span>
@@ -152,8 +154,8 @@
             <li><b>WASD</b> move</li><li><b>Mouse</b> aim</li>
             <li><b>L-Click</b> shoot</li><li><b>R-Click</b> ADS</li>
             <li><b>Shift</b> sprint</li><li><b>Space</b> jump</li>
-            <li><b>1-6/Scroll</b> weapons</li><li><b>G</b> grenade</li>
-            <li><b>E</b> car</li><li><b>F</b> grapple</li><li><b>V</b> melee</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
+            <li><b>Tab/Scroll</b> switch weapon</li><li><b>X</b> discard weapon</li>
+            <li><b>G</b> grenade</li><li><b>E</b> car</li><li><b>F</b> grapple</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
           </ul>
         </details>
       </div>
@@ -221,8 +223,14 @@
         </div>
       </div>
 
+      <!-- Rankings (local leaderboard by total kills) -->
+      <div class="lobby-panel panel-play" id="rankings">
+        <div class="lp-title">RANKINGS</div>
+        <ol id="rank-list"></ol>
+      </div>
+
       <!-- News ticker -->
-      <div class="panel-play" id="news"><span id="news-text">🔥 Welcome to Toon Shooter! · New: Rocket Launcher, Knife & Marksman · Drop into any mode — bots fill the lobby · Headshots deal 2× · Grab shields &amp; weapons on the map · Press TAB for rankings</span></div>
+      <div class="panel-play" id="news"><span id="news-text">🔥 Welcome to VERTEX! · Loot weapons off the map · TAB switches weapons · X discards your gun · Headshots deal 2× · Infection: stab survivors to turn them · Capture the flag vs CPUs</span></div>
 
       <!-- Party row -->
       <div class="lobby-panel panel-play" id="party">
@@ -262,7 +270,7 @@
     <!-- Loading screen -->
     <div id="loading" class="hidden">
       <div class="load-inner">
-        <div class="logo">TOON&nbsp;SHOOTER</div>
+        <div class="logo">VERTEX</div>
         <div class="load-bar"><div id="load-fill"></div></div>
         <div id="load-status">SEARCHING FOR WORLD…</div>
       </div>

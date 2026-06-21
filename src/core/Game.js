@@ -222,10 +222,10 @@ export class Game {
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR' && this.state === STATE.PLAYING) this.weapons.startReload()
-      if (e.code === 'Tab') { e.preventDefault(); if (this.state === STATE.PLAYING) this.hud.showScoreboard(this._scoreboardRows()) }
-    })
-    window.addEventListener('keyup', (e) => {
-      if (e.code === 'Tab') this.hud.hideScoreboard()
+      // TAB cycles through the weapons you actually have.
+      if (e.code === 'Tab') { e.preventDefault(); if (this.state === STATE.PLAYING && !e.repeat) this.weapons.cycle(1) }
+      // X discards the current weapon (drops it as loot).
+      if (e.code === 'KeyX' && this.state === STATE.PLAYING && !e.repeat) this._discardWeapon()
     })
 
     // Mobile RANK button (toggle).
@@ -233,6 +233,11 @@ export class Game {
     rankBtn.addEventListener('click', () => {
       if (this.hud.el.scoreboard.classList.contains('hidden')) this.hud.showScoreboard(this._scoreboardRows())
       else this.hud.hideScoreboard()
+    })
+
+    // Discard-weapon button.
+    document.getElementById('drop-btn')?.addEventListener('click', () => {
+      if (this.state === STATE.PLAYING) this._discardWeapon()
     })
 
     // Victory screen -> back to the lobby.
@@ -458,6 +463,19 @@ export class Game {
       `<li><div class="ch-row"><span>${c.t}</span><span class="xp">+${c.xp}</span></div>
        <div class="ch-bar"><i style="width:${(c.cur / c.max) * 100}%"></i></div>
        <div style="font-size:10px;opacity:.6">${c.cur}/${c.max}</div></li>`).join('')
+
+    // Rankings: a local leaderboard (your saved kills vs seeded rivals).
+    const rl = $('rank-list')
+    if (rl) {
+      const rivals = [
+        ['Reaper', 920], ['Vortex', 740], ['Nyx', 610], ['Specter', 480],
+        ['Riot', 360], ['Comet', 250], ['Hex', 170], ['Pulse', 90],
+      ]
+      const board = [...rivals, [name + ' (you)', kills, true]]
+        .sort((a, b) => b[1] - a[1]).slice(0, 8)
+      rl.innerHTML = board.map((r, i) =>
+        `<li class="${r[2] ? 'me' : ''}"><span class="rk-pos">${i + 1}</span><span class="rk-name">${r[0]}</span><span class="rk-k">${r[1]}</span></li>`).join('')
+    }
   }
 
   // Return to the lobby menu (from victory/game-over).
@@ -699,6 +717,19 @@ export class Game {
     applyTint(bot.group, 0x55dd55)
     bot.animator?.play?.('Idle', { fade: 0.1 })
     this.hud.addKillFeed(`🧟 ${bot.name} got infected!`)
+  }
+
+  // Drop the current weapon as loot (X / DROP button). Keeps knife + grapple.
+  _discardWeapon() {
+    const i = this.weapons.index
+    const def = this.weapons.defs[i]
+    if (!def || def.melee || def.tool) return
+    if (this.weapons.discard(i)) {
+      const p = this.player.position
+      this.pickups.spawnWeapon({ index: i, model: def.model, key: def.key }, p.x + 2.5, p.z)
+      this.hud.setOwned(this.weapons.owned)
+      this.hud.addKillFeed(`🗑 Dropped ${def.label || def.key}`)
+    }
   }
 
   // The player got stabbed to death → respawn as a knife-only zombie.

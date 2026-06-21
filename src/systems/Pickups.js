@@ -21,7 +21,7 @@ export class Pickups {
     const col = type === 'health' ? 0x4ade80 : type === 'shield' ? 0x3da9fc : 0xffcb3d
     const emi = type === 'health' ? 0x2a8a4a : type === 'shield' ? 0x2176c4 : 0xb8901f
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.7, 0.07, 8, 24),
+      new THREE.TorusGeometry(0.42, 0.05, 8, 24),
       new THREE.MeshStandardMaterial({ color: col, emissive: emi, emissiveIntensity: 1 })
     )
     ring.rotation.x = Math.PI / 2
@@ -36,11 +36,11 @@ export class Pickups {
       m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
       const box = new THREE.Box3().setFromObject(m.scene)
       const size = new THREE.Vector3(); box.getSize(size)
-      const s = 1.4 / (Math.max(size.x, size.y, size.z) || 1)
+      const s = 0.7 / (Math.max(size.x, size.y, size.z) || 1)
       m.scene.scale.setScalar(s)
       const box2 = new THREE.Box3().setFromObject(m.scene)
       const c = new THREE.Vector3(); box2.getCenter(c)
-      m.scene.position.set(-c.x, 1.1 - box2.min.y, -c.z)
+      m.scene.position.set(-c.x, 0.7 - box2.min.y, -c.z)
       const spin = new THREE.Group()
       spin.add(m.scene)
       group.add(spin)
@@ -54,7 +54,7 @@ export class Pickups {
     group.position.set(x, 0, z)
     this.world.scene.add(group)
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.8, 0.07, 8, 24),
+      new THREE.TorusGeometry(0.5, 0.05, 8, 24),
       new THREE.MeshStandardMaterial({ color: 0x9ad0ff, emissive: 0x2a6cff, emissiveIntensity: 1 })
     )
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.1
@@ -65,8 +65,8 @@ export class Pickups {
       if (!m) return
       m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
       const box = new THREE.Box3().setFromObject(m.scene); const sz = new THREE.Vector3(); box.getSize(sz)
-      m.scene.scale.setScalar(1.8 / (Math.max(sz.x, sz.y, sz.z) || 1))
-      const spin = new THREE.Group(); spin.add(m.scene); spin.position.y = 1.1; group.add(spin)
+      m.scene.scale.setScalar(0.9 / (Math.max(sz.x, sz.y, sz.z) || 1))
+      const spin = new THREE.Group(); spin.add(m.scene); spin.position.y = 0.7; group.add(spin)
       item.spin = spin
     })
   }

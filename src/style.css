@@ -167,14 +167,24 @@ body {
 #weapon-list .wpn.rar-rare { --rar: #3da9fc; }
 #weapon-list .wpn.rar-epic { --rar: #b06aff; }
 #weapon-list .wpn.rar-legendary { --rar: #ffb33d; }
-/* Locked (not yet picked up) */
-#weapon-list .wpn.locked { filter: grayscale(1) brightness(0.45); opacity: 0.5; }
+/* Locked (not yet picked up) — hidden entirely so you only see what you carry */
+#weapon-list .wpn.locked { display: none; }
 /* Active (equipped) pops up */
 #weapon-list .wpn.active {
   transform: translateY(-8px) scale(1.12);
   box-shadow: inset 0 -16px 20px -10px var(--rar, #fff), 0 0 16px var(--rar, #fff);
   filter: none;
 }
+
+/* Discard-weapon button (bottom, next to the hotbar) */
+#drop-btn {
+  position: absolute; bottom: 22px; left: calc(50% + 430px); transform: translateX(-50%);
+  background: rgba(220,60,80,0.25); border: 1px solid rgba(255,90,110,0.7);
+  color: #ffd0d6; font-weight: 800; font-size: 12px; letter-spacing: 1px;
+  padding: 8px 12px; border-radius: 10px; cursor: pointer;
+}
+#drop-btn:hover { background: rgba(220,60,80,0.45); }
+@media (max-width: 900px) { #drop-btn { left: auto; right: 12px; bottom: 90px; transform: none; } }
 
 /* Zombie player tint (Infection) */
 #zombie-tint {
@@ -406,6 +416,15 @@ body.touch #rank-btn { display: block; }
 #challenge-list .ch-bar i { display: block; height: 100%; background: var(--hp); }
 #challenge-list .xp { color: var(--accent); font-weight: 700; }
 
+/* Rankings (right column) */
+#rankings { top: 472px; right: 16px; }
+#rank-list { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+#rank-list li { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 6px; border-radius: 6px; }
+#rank-list li.me { background: rgba(61,169,252,0.28); font-weight: 800; }
+#rank-list .rk-pos { width: 16px; opacity: 0.6; text-align: right; }
+#rank-list .rk-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#rank-list .rk-k { color: var(--accent); font-weight: 700; }
+
 /* Career (bottom-right) */
 #career { bottom: 130px; right: 16px; }
 .career-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -430,7 +449,7 @@ body.touch #rank-btn { display: block; }
 .ev-new { position: absolute; top: -6px; right: -6px; background: #ff3b6b; color: #fff; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 8px; letter-spacing: 1px; }
 
 @media (max-width: 900px) {
-  #player-card, #season-banner, #challenges, #career, #party { display: none; }
+  #player-card, #season-banner, #challenges, #career, #party, #rankings { display: none; }
 }
 .mm-label { font-size: 12px; letter-spacing: 3px; color: var(--accent); font-weight: 800; margin-bottom: 8px; }
 
