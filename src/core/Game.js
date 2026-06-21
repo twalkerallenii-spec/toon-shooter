@@ -23,6 +23,35 @@ const STATE = { MENU: 'menu', LOADING: 'loading', PLAYING: 'playing', PAUSED: 'p
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Locker skins: 3 rigged kit characters + animated recolor variants. `base` is
+// the real model file; `tint` recolors its materials (null = original look).
+const SKINS = [
+  { id: 'Character_Soldier', base: 'Character_Soldier', label: 'Soldier', ico: '🪖', tint: null },
+  { id: 'Character_Hazmat', base: 'Character_Hazmat', label: 'Hazmat', ico: '☣️', tint: null },
+  { id: 'Character_Enemy', base: 'Character_Enemy', label: 'Alien', ico: '👽', tint: null },
+  { id: 'Soldier_Red', base: 'Character_Soldier', label: 'Red Ops', ico: '🟥', tint: 0xff5a5a },
+  { id: 'Soldier_Gold', base: 'Character_Soldier', label: 'Gold Elite', ico: '🟨', tint: 0xffd24a },
+  { id: 'Soldier_Shadow', base: 'Character_Soldier', label: 'Shadow', ico: '⬛', tint: 0x586079 },
+  { id: 'Soldier_Arctic', base: 'Character_Soldier', label: 'Arctic', ico: '🟦', tint: 0x9fd0ff },
+  { id: 'Hazmat_Toxic', base: 'Character_Hazmat', label: 'Toxic', ico: '🟩', tint: 0x7cff5a },
+  { id: 'Hazmat_Crimson', base: 'Character_Hazmat', label: 'Crimson', ico: '🩸', tint: 0xd42a3a },
+  { id: 'Alien_Frost', base: 'Character_Enemy', label: 'Frost', ico: '❄️', tint: 0x8ad8ff },
+  { id: 'Alien_Magma', base: 'Character_Enemy', label: 'Magma', ico: '🔥', tint: 0xff7a3a },
+  { id: 'Alien_Void', base: 'Character_Enemy', label: 'Void', ico: '🟪', tint: 0xb06aff },
+]
+const skinOf = (id) => SKINS.find((s) => s.id === id) || SKINS[0]
+// Recolor a freshly-cloned model in place (clones materials so the cache is safe).
+function applyTint(scene, tint) {
+  if (!scene || tint == null) return
+  const c = new THREE.Color(tint)
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.material) return
+    const mats = Array.isArray(o.material) ? o.material : [o.material]
+    const cloned = mats.map((m) => { const n = m.clone(); n.color?.copy?.(c); return n })
+    o.material = Array.isArray(o.material) ? cloned : cloned[0]
+  })
+}
+
 // Tiny deterministic PRNG for the lobby scenery.
 function mulberryLobby(a) {
   return function () {
@@ -163,7 +192,12 @@ export class Game {
       })
     })
 
-    // Locker — pick your character.
+    // Locker — pick your character. Grid is generated from SKINS.
+    const grid = document.getElementById('char-grid')
+    if (grid) {
+      grid.innerHTML = SKINS.map((s) =>
+        `<button class="char-card" data-char="${s.id}"><span class="cc-ico">${s.ico}</span>${s.label}</button>`).join('')
+    }
     document.querySelectorAll('#char-grid .char-card').forEach((card) => {
       card.classList.toggle('active', card.dataset.char === this.character)
       card.addEventListener('click', () => {
@@ -359,8 +393,10 @@ export class Game {
     if (!this.lobbyScene) return
     if (this.lobbyModel) { this.lobbyScene.remove(this.lobbyModel); this.lobbyMixer = null }
     const podCenter = this._podCenter
-    this.assets.loadModel(`models/characters/${name}.gltf`).then((m) => {
+    const skin = skinOf(name)
+    this.assets.loadModel(`models/characters/${skin.base}.gltf`).then((m) => {
       if (!m || this.character !== name) return
+      applyTint(m.scene, skin.tint)
       m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
       const box = new THREE.Box3().setFromObject(m.scene); const s = new THREE.Vector3(); box.getSize(s)
       m.scene.scale.setScalar(2.5 / (s.y || 1))
@@ -437,7 +473,7 @@ export class Game {
     const name = localStorage.getItem('ts_name') || (document.getElementById('mp-name')?.value) || 'Recruit'
     if ($('pc-name')) $('pc-name').textContent = name
     if ($('party-you')) $('party-you').textContent = name
-    const av = { Character_Soldier: '🪖', Character_Hazmat: '☣️', Character_Enemy: '👽' }[this.character] || '🪖'
+    const av = skinOf(this.character).ico
     if ($('pc-avatar')) $('pc-avatar').textContent = av
     // Daily challenges with live progress from stats.
     const ch = [
@@ -1433,8 +1469,9 @@ export class Game {
     this.player.setThirdPerson(!!this.settings.thirdPerson)
     // Lazily load the player body model when third-person is first enabled.
     if (this.settings.thirdPerson && !this.player.body) {
-      this.assets.loadModel(`models/characters/${this.character}.gltf`).then((m) => {
-        if (m && this.player) this.player.setBody(m.scene, m.animations)
+      const skin = skinOf(this.character)
+      this.assets.loadModel(`models/characters/${skin.base}.gltf`).then((m) => {
+        if (m && this.player) { applyTint(m.scene, skin.tint); this.player.setBody(m.scene, m.animations) }
       })
     }
   }
