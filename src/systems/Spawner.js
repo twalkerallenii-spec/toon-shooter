@@ -62,9 +62,10 @@ export class Spawner {
     // animation complete) and ready for removal.
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i]
-      const wasAlive = e.alive
       const finished = e.update(dt, player, camera)
-      if (wasAlive && !e.alive) this.onKill?.(e.group.position) // kill at death moment
+      // Count the kill once, whenever it's found dead — the player's bullet sets
+      // alive=false outside this loop, so a same-frame transition check misses it.
+      if (!e.alive && !e._counted) { e._counted = true; this.onKill?.(e.group.position) }
       if (finished) {
         e.dispose()
         this.enemies.splice(i, 1)

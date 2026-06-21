@@ -108,7 +108,7 @@ export class Game {
       if (this.state === STATE.PAUSED) this.resume()
       else if (this.state === STATE.DEAD) { this.hud.hidePause(); this._startSelectedMode() }
     })
-    document.getElementById('pause-quit').addEventListener('click', () => { this.hud.hidePause(); this._toLobby() })
+    document.getElementById('pause-quit').addEventListener('click', () => this._quitToLobby())
 
     // Multiplayer: server URL precedence = ?server= > saved > empty.
     // Remembered in localStorage so you don't retype your Render URL.
@@ -608,9 +608,25 @@ export class Game {
     }
   }
 
+  // Quit from pause → finalize this match and show a recap (kills/XP gained +
+  // new career total) before returning to the lobby. Proves it banked.
+  _quitToLobby() {
+    this.hud.hidePause()
+    if (this.state !== STATE.PLAYING && this.state !== STATE.PAUSED) { this._toLobby(); return }
+    this._recordMatch(false) // credit the match (kills already live-saved); builds _summary
+    this.state = STATE.DEAD
+    if (!this.input.isTouch) this.input.exitLock()
+    const total = this._stats().kills || 0
+    const k = this._summary?.kills ?? (this.kills || this.enemyKills || 0)
+    document.getElementById('victory-btn').textContent = 'BACK TO LOBBY'
+    this.hud.showMatchSummary(this._summary)
+    this.hud.showVictory('MATCH SUMMARY', `This match: ${k} kills · +${this._summary?.xp || 0} XP    ·    Career kills: ${total}`, false)
+  }
+
   // Return to the lobby menu (from victory/game-over).
   _toLobby() {
     this._recordMatch(false) // save kills/XP/coins even if you just quit (deduped)
+    const vb = document.getElementById('victory-btn'); if (vb) vb.textContent = 'PLAY AGAIN'
     this.state = STATE.MENU
     this.hud.hide()
     this.hud.hideVictory()
@@ -1966,13 +1982,7 @@ export class Game {
     for (const e of this.spawner.enemies) {
       if (!e.alive) continue
       const d = Math.hypot(e.group.position.x - pos.x, e.group.position.z - pos.z)
-      if (d < radius) {
-        const killed = e.takeHit(damage * (1 - d / radius))
-        if (killed) {
-          this.score += 10; this.hud.setScore(this.score)
-          this.pickups.rollDrop(e.group.position.x, e.group.position.z)
-        }
-      }
+      if (d < radius) e.takeHit(damage * (1 - d / radius)) // counted by the spawner
     }
     // Bots (FFA/BR/etc.) — count as player kills.
     for (const b of this.bots) {
