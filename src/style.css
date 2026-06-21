@@ -791,3 +791,12 @@ body.touch #rank-btn { display: block; }
 #online { max-height: 150px; overflow-y: auto; }
 #right-rail #online-list { max-height: none; }
 @media (max-width: 900px) { #right-rail { display: none; } }
+
+/* Neon showcase frame around the character (stream-overlay pack) */
+#neon-frame {
+  position: absolute; top: 8%; bottom: 11%; left: 26%; right: 26%;
+  pointer-events: none; z-index: 0;
+  background: var(--ui-neon) center / 100% 100% no-repeat;
+  filter: drop-shadow(0 0 16px rgba(255,180,40,0.35));
+}
+@media (max-width: 900px) { #neon-frame { left: 12%; right: 12%; top: 6%; bottom: 16%; } }

@@ -16,6 +16,7 @@ import darkBg from './DarkBGContainer.png'
 import levelBar from './LevelBar.png'
 import levelBarBg from './LevelBarContainer.png'
 import background from './Background.jpg'
+import neonFrame from './neon-frame.png'
 
 const vars = {
   '--ui-play': `url(${playBtn})`,
@@ -34,6 +35,7 @@ const vars = {
   '--ui-levelbar': `url(${levelBar})`,
   '--ui-levelbar-bg': `url(${levelBarBg})`,
   '--ui-bg': `url(${background})`,
+  '--ui-neon': `url(${neonFrame})`,
 }
 const root = document.documentElement
 for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v)
