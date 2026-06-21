@@ -479,15 +479,25 @@ export class Game {
   _stats() {
     try { return JSON.parse(localStorage.getItem('ts_stats') || '{}') } catch { return {} }
   }
+  // Credit a kill to saved career stats IMMEDIATELY (not batched at match end),
+  // so kills can never be lost by how a match ends. +30 XP each.
+  _creditKill(n = 1) {
+    const s = this._stats()
+    s.kills = (s.kills || 0) + n
+    s.xp = (s.xp || 0) + 30 * n
+    localStorage.setItem('ts_stats', JSON.stringify(s))
+    this._populateLobby()
+  }
+
   _recordMatch(won) {
     if (this._recorded) return // once per match (win, death, or quit)
     this._recorded = true
     const s = this._stats()
     const k = this.kills || this.enemyKills || 0
     s.matches = (s.matches || 0) + 1
-    s.kills = (s.kills || 0) + k
+    // kills are credited live in _creditKill — only count matches/wins/win-XP here
     s.wins = (s.wins || 0) + (won ? 1 : 0)
-    s.xp = (s.xp || 0) + (won ? 500 : 200) + k * 30
+    s.xp = (s.xp || 0) + (won ? 500 : 200)
     localStorage.setItem('ts_stats', JSON.stringify(s))
     // Coins: earn from kills + a win bonus.
     const coinGain = k * 10 + (won ? 100 : 25)
@@ -705,6 +715,7 @@ export class Game {
     this.spawner.onKill = (pos) => {
       this.score += 10
       this.enemyKills = (this.enemyKills || 0) + 1
+      this._creditKill() // save to career immediately
       this.hud.setScore(this.score)
       if (pos) this.pickups.rollDrop(pos.x, pos.z)
     }
@@ -1018,6 +1029,7 @@ export class Game {
     if (attacker && attacker.kills != null) attacker.kills++
     if (!attacker) {
       this.kills = (this.kills || 0) + 1 // player kill (no bot attacker)
+      this._creditKill() // save to career immediately
       this.hud.showKillBanner(`ELIMINATED ${bot.name}`)
       // Gun Game: each kill hands you a random gun (melee/grapple excluded — your
       // knife stays as a constant backup).
@@ -1589,6 +1601,7 @@ export class Game {
     }
     if (byId === this.net?.id && victimId !== this.net?.id) {
       this.kills = (this.kills || 0) + 1
+      this._creditKill() // save to career immediately
       this.deaths = this.deaths || 0
       this.hud.setScore(`${this.kills}/${this.deaths}`)
       this.hud.showKillBanner(`ELIMINATED ${victim}`)
@@ -1888,6 +1901,19 @@ export class Game {
     if (this.zone) {
       this.hud.setStorm(this.zone.update(dt, this.player))
       this.hud.setStormTimer(this.zone.statusText())
+      // Bots flee the storm: run to the safe-zone centre near/over the edge, and
+      // take storm damage if caught outside (so they don't camp the storm).
+      const Z = this.zone
+      for (const b of this.bots) {
+        if (!b.alive) continue
+        const d = Math.hypot(b.position.x - Z.cx, b.position.z - Z.cz)
+        if (d > Z.radius * 0.82) {
+          b.forceGoal = { x: Z.cx, z: Z.cz }
+          if (d > Z.radius) b.applyDamage?.(Z.damage * dt, { name: 'the storm' }) // not a player kill
+        } else if (b.forceGoal && b.forceGoal.x === Z.cx && b.forceGoal.z === Z.cz) {
+          b.forceGoal = null // safely inside → resume normal AI
+        }
+      }
       // Battle Royale: survive until the storm fully closes -> Victory Royale.
       if (this.remotePlayers.size === 0 && this.player.alive && !this._wonBR && this.zone.radius <= this.zone.minR + 0.3) {
         this._wonBR = true
