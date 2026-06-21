@@ -60,6 +60,10 @@ export class CharacterAnimator {
 // Scale + ground a loaded model so it stands `targetHeight` units tall with its
 // feet at y=0, centered on x/z. Returns the computed scale factor.
 export function normalizeModel(root, targetHeight) {
+  // Kit characters face +Z by default, but movement code points them with
+  // rotation.y = atan2(dx, dz) (a -Z-forward convention) — so flip them 180°
+  // or they run backwards. (The FPS viewmodel is separate and unaffected.)
+  root.rotation.y = Math.PI
   const box = new THREE.Box3().setFromObject(root)
   const size = new THREE.Vector3()
   box.getSize(size)
