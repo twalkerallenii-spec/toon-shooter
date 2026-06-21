@@ -5,6 +5,11 @@ export class HUD {
       hud: document.getElementById('hud'),
       crosshair: document.getElementById('crosshair'),
       hpFill: document.getElementById('hp-fill'),
+      shFill: document.getElementById('sh-fill'),
+      hurt: document.getElementById('hurt-vignette'),
+      killstreak: document.getElementById('killstreak'),
+      dmgLayer: document.getElementById('dmg-layer'),
+      compassStrip: document.getElementById('compass-strip'),
       score: document.getElementById('score'),
       wave: document.getElementById('wave'),
       ammo: document.getElementById('ammo'),
@@ -40,6 +45,19 @@ export class HUD {
       pauseMsg: document.getElementById('pause-msg'),
       pauseResume: document.getElementById('pause-resume'),
     }
+    this._buildCompass()
+  }
+
+  _buildCompass() {
+    if (!this.el.compassStrip) return
+    const dirs = ['S', 'SW', 'W', 'NW', 'N', 'NE', 'E', 'SE']
+    let html = ''
+    // Repeat across -360..720 deg so it never runs out while panning (2px/deg).
+    for (let deg = -360; deg <= 720; deg += 45) {
+      const label = dirs[((deg / 45) % 8 + 8) % 8]
+      html += `<span style="position:absolute;left:${deg * 2}px">${label}</span>`
+    }
+    this.el.compassStrip.innerHTML = html
   }
 
   show() { this.el.hud.classList.remove('hidden') }
@@ -51,12 +69,42 @@ export class HUD {
     this.el.hpFill.style.background = k < 0.3 ? 'var(--hp-low)' : 'var(--hp)'
   }
 
+  setShield(sh) { this.el.shFill.style.width = `${Math.max(0, Math.min(100, sh))}%` }
+  setHurt(v) { this.el.hurt.style.opacity = Math.max(0, Math.min(1, v)) }
+  setCrosshairEnemy(on) { this.el.crosshair.classList.toggle('enemy', !!on) }
+
+  killStreak(n) {
+    const names = { 2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'MULTI KILL', 5: 'RAMPAGE', 6: 'UNSTOPPABLE', 7: 'GODLIKE' }
+    this.el.killstreak.textContent = names[Math.min(n, 7)] || 'GODLIKE'
+    this.el.killstreak.classList.remove('hidden')
+    void this.el.killstreak.offsetWidth
+    this.el.killstreak.classList.add('pop')
+    clearTimeout(this._ksT)
+    this._ksT = setTimeout(() => { this.el.killstreak.classList.add('hidden'); this.el.killstreak.classList.remove('pop') }, 1300)
+  }
+
+  damageNumber(x, y, amount, head) {
+    const d = document.createElement('div')
+    d.className = 'dmg-num' + (head ? ' head' : '')
+    d.textContent = head ? `${amount}!` : `${amount}`
+    d.style.left = `${x}px`; d.style.top = `${y}px`
+    this.el.dmgLayer.appendChild(d)
+    setTimeout(() => d.remove(), 800)
+  }
+
+  setCompass(yaw) {
+    // yaw 0 faces +Z (south). Shift the strip so the heading sits centered.
+    const deg = (yaw * 180 / Math.PI)
+    this.el.compassStrip.style.transform = `translateX(${-deg * 2}px)`
+  }
+
   setScore(v) { this.el.score.textContent = v }
   setWave(v) { this.el.wave.textContent = v }
 
   setAmmo(ammo, max) {
     this.el.ammo.textContent = ammo
     this.el.ammoMax.textContent = max
+    this.el.ammo.style.color = ammo <= Math.ceil(max * 0.25) ? '#ff5a5a' : '#fff' // low-ammo warning
   }
 
   setReloading(on) {

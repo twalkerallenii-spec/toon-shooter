@@ -10,20 +10,19 @@ export class Pickups {
     this.items = [] // { group, type, x, z, t }
   }
 
-  // type: 'health' | 'ammo'
+  // type: 'health' | 'ammo' | 'shield'
   spawn(type, x, z) {
-    const model = type === 'health' ? 'Health' : 'GasCan'
+    const model = type === 'health' ? 'Health' : type === 'shield' ? 'GasTank' : 'GasCan'
     const group = new THREE.Group()
     group.position.set(x, 0, z)
     this.world.scene.add(group)
 
     // Glow base ring so pickups are easy to spot.
+    const col = type === 'health' ? 0x4ade80 : type === 'shield' ? 0x3da9fc : 0xffcb3d
+    const emi = type === 'health' ? 0x2a8a4a : type === 'shield' ? 0x2176c4 : 0xb8901f
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.7, 0.07, 8, 24),
-      new THREE.MeshStandardMaterial({
-        color: type === 'health' ? 0x4ade80 : 0xffcb3d,
-        emissive: type === 'health' ? 0x2a8a4a : 0xb8901f, emissiveIntensity: 1,
-      })
+      new THREE.MeshStandardMaterial({ color: col, emissive: emi, emissiveIntensity: 1 })
     )
     ring.rotation.x = Math.PI / 2
     ring.position.y = 0.1
@@ -86,7 +85,8 @@ export class Pickups {
   rollDrop(x, z) {
     const r = Math.random()
     if (r < 0.16) this.spawn('health', x, z)
-    else if (r < 0.34) this.spawn('ammo', x, z)
+    else if (r < 0.30) this.spawn('ammo', x, z)
+    else if (r < 0.40) this.spawn('shield', x, z)
   }
 
   update(dt, player, weapons) {
@@ -107,6 +107,8 @@ export class Pickups {
         } else if (it.type === 'weapon') {
           weapons.ammoByWeapon[it.wIndex] = weapons.defs[it.wIndex].mag
           weapons.switchTo(it.wIndex); took = true
+        } else if (it.type === 'shield' && player.shield < 100) {
+          player.shield = Math.min(100, player.shield + 50); took = true
         }
         if (took) {
           this.audio?.pickup()

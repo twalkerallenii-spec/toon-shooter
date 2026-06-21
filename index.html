@@ -25,7 +25,14 @@
         <div class="stat"><span class="label">HP</span>
           <div class="bar"><div id="hp-fill"></div></div>
         </div>
+        <div class="stat"><span class="label">SH</span>
+          <div class="bar bar-sh"><div id="sh-fill"></div></div>
+        </div>
       </div>
+      <div id="compass"><div id="compass-strip"></div></div>
+      <div id="killstreak" class="hidden"></div>
+      <div id="dmg-layer"></div>
+      <div id="hurt-vignette"></div>
       <div id="hud-top-right">
         <div class="stat-num"><span class="label">SCORE</span> <span id="score">0</span></div>
         <div class="stat-num"><span class="label">WAVE</span> <span id="wave">1</span></div>
@@ -129,6 +136,15 @@
             </label>
             <label class="set-row set-check">
               <input id="set-tps" type="checkbox" /> Third-person camera
+            </label>
+            <label class="set-row">FOV
+              <input id="set-fov" type="range" min="60" max="100" step="1" value="72" />
+            </label>
+            <label class="set-row">Volume
+              <input id="set-vol" type="range" min="0" max="1" step="0.05" value="0.5" />
+            </label>
+            <label class="set-row set-check">
+              <input id="set-shadows" type="checkbox" checked /> Shadows
             </label>
           </div>
           <ul class="controls">

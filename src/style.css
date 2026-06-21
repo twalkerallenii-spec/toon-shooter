@@ -65,6 +65,47 @@ body {
 }
 
 #hud-top-left { position: absolute; top: 20px; left: 22px; }
+.bar-sh { margin-top: 3px; }
+#sh-fill { height: 100%; width: 0%; background: #3da9fc; transition: width 0.15s ease; }
+
+/* Crosshair turns red over a target */
+#crosshair.enemy .ch-line, #crosshair.enemy .ch-dot { background: #ff4d4d; }
+
+/* Hurt vignette */
+#hurt-vignette {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, transparent 45%, rgba(200,0,0,0.55) 100%);
+  transition: opacity 0.12s ease;
+}
+
+/* Kill streak banner */
+#killstreak {
+  position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+  font-size: 40px; font-weight: 900; letter-spacing: 3px; color: #ffcb3d;
+  text-shadow: 0 0 18px rgba(255,160,0,0.7), 0 3px 0 rgba(0,0,0,0.4);
+}
+#killstreak.pop { animation: kspop 0.35s ease-out; }
+@keyframes kspop { 0% { transform: translateX(-50%) scale(0.5); opacity: 0; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
+
+/* Floating damage numbers */
+#dmg-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.dmg-num {
+  position: absolute; transform: translate(-50%, -50%);
+  font-weight: 800; font-size: 18px; color: #fff; text-shadow: 0 2px 3px rgba(0,0,0,0.8);
+  animation: dmgrise 0.8s ease-out forwards;
+}
+.dmg-num.head { color: #ffcb3d; font-size: 24px; }
+@keyframes dmgrise { 0% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -150%); } }
+
+/* Compass */
+#compass {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  width: 240px; height: 22px; overflow: hidden; opacity: 0.8;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+}
+#compass-strip { position: absolute; left: 50%; top: 2px; height: 18px; font-weight: 800; font-size: 13px; color: #fff; }
+#compass-strip span { transform: translateX(-50%); opacity: 0.85; }
 #hud-top-right { position: absolute; top: 20px; right: 22px; text-align: right; }
 #hud-bottom-right {
   position: absolute; bottom: 20px; right: 26px;

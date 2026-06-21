@@ -31,6 +31,8 @@ export class Player {
     // Stats
     this.maxHp = 100
     this.hp = this.maxHp
+    this.shield = 0
+    this._sinceDamage = 99
     this.alive = true
     this.team = null // set by Game in team modes; used by bot targeting
 
@@ -155,6 +157,9 @@ export class Player {
 
   takeDamage(amount) {
     if (!this.alive) return
+    this._sinceDamage = 0
+    if (this.shield > 0) { const s = Math.min(this.shield, amount); this.shield -= s; amount -= s }
+    if (amount <= 0) return
     this.hp = Math.max(0, this.hp - amount)
     if (this.hp <= 0) this.alive = false
   }
@@ -172,15 +177,21 @@ export class Player {
   }
 
   update(dt) {
+    // Out-of-combat health regen.
+    this._sinceDamage += dt
+    if (this.alive && this._sinceDamage > 5 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 12 * dt)
+
     if (this.alive) this._handleLook()
     this._handleMove(dt)
     if (this.shootingTimer > 0) this.shootingTimer -= dt
     this.recoil *= Math.max(0, 1 - dt * 9) // recover from kick
 
-    // Smooth ADS transition + FOV zoom.
+    // Smooth ADS transition + FOV zoom + sprint FOV kick.
     const adsTarget = this.adsActive && this.alive ? 1 : 0
     this.adsAmount += (adsTarget - this.adsAmount) * Math.min(1, dt * 12)
-    const fov = this.baseFov + (this.adsTargetFov - this.baseFov) * this.adsAmount
+    const sprintKick = (this.sprinting && this.adsAmount < 0.2) ? 8 : 0
+    this._sprintFov = (this._sprintFov || 0) + (sprintKick - (this._sprintFov || 0)) * Math.min(1, dt * 8)
+    const fov = this.baseFov + (this.adsTargetFov - this.baseFov) * this.adsAmount + this._sprintFov
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov
       this.camera.updateProjectionMatrix()
@@ -257,8 +268,11 @@ export class Player {
       if (tm.x || tm.y) { ix += tm.x; iz -= tm.y }
     }
 
-    const sprint = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight')
-    const speed = sprint ? this.sprintSpeed : this.walkSpeed
+    const crouch = this.input.isDown('ControlLeft') || this.input.isDown('KeyC')
+    this.crouching = crouch && this.onGround
+    const sprint = (this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight')) && !crouch
+    let speed = sprint ? this.sprintSpeed : this.walkSpeed
+    if (this.crouching) speed *= 0.45
 
     TMP.set(0, 0, 0)
     TMP.addScaledVector(FORWARD, iz)
@@ -282,15 +296,24 @@ export class Player {
     } else if (this.alive && this.onGround && spaceDown) {
       this.velocity.y = this.jumpSpeed
       this.onGround = false
+      this._airJumps = 1 // allow one mid-air (double) jump
+    } else if (this.alive && spacePressed && !this.onGround && this._airJumps > 0) {
+      this.velocity.y = this.jumpSpeed * 0.9
+      this._airJumps--
+      this.onLand?.(this.position, true) // little puff on double-jump
     }
     this.velocity.y += this.gravity * dt
 
+    const wasAir = !this.onGround
+    const fellSpeed = this.velocity.y
     this.position.x += this.velocity.x * dt
     this.position.y += this.velocity.y * dt
     this.position.z += this.velocity.z * dt
 
     if (this.world.cityCollider) this._resolveCity()
     else this._resolvePlatforms()
+    if (this.onGround) this._airJumps = 1
+    if (wasAir && this.onGround && fellSpeed < -6) this.onLand?.(this.position, false) // landing dust
     this.world.clampToArena(this.position)
 
     // Jump pads launch you when standing on one.
@@ -423,9 +446,10 @@ export class Player {
     if (this.moving && this.onGround) this.bobT += dt * (this.sprinting ? 14 : 10)
     const bob = (this.moving && this.onGround) ? Math.sin(this.bobT) * 0.05 : 0
 
+    const eyeH = this.crouching ? 1.0 : this.eyeHeight
     this.camera.position.set(
       this.position.x,
-      this.position.y + this.eyeHeight + bob,
+      this.position.y + eyeH + bob,
       this.position.z
     )
     // Recoil kicks the view up briefly.

@@ -6,7 +6,9 @@ export const WEAPONS = [
   { key: 'AK',      model: 'AK',      damage: 30, fireRate: 9,  mag: 30, spread: 0.022, pellets: 1, auto: true,  range: 220, reload: 1.4, adsFov: 50, recoil: 0.05 },
   { key: 'SMG',     model: 'SMG',     damage: 17, fireRate: 14, mag: 30, spread: 0.030, pellets: 1, auto: true,  range: 160, reload: 1.3, adsFov: 55, recoil: 0.035 },
   { key: 'Shotgun', model: 'Shotgun', damage: 13, fireRate: 1.4, mag: 6, spread: 0.085, pellets: 10, auto: false, range: 140, reload: 0.9, adsFov: 60, recoil: 0.12 },
-  { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16 },
+  { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16, tracer: 0x9fe7ff },
+  { key: 'Revolver', model: 'Revolver', label: 'Revolver', damage: 55, fireRate: 3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 220, reload: 1.3, adsFov: 52, recoil: 0.12, tracer: 0xffd24a },
+  { key: 'Minigun', model: 'ShortCannon', label: 'Minigun', damage: 13, fireRate: 18, mag: 80, spread: 0.04, pellets: 1, auto: true, range: 200, reload: 3.0, adsFov: 60, recoil: 0.03, tracer: 0xff7a3d },
   { key: 'GL',      model: 'GrenadeLauncher', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
   { key: 'Zip',     model: 'Pistol', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
 ]
@@ -95,7 +97,7 @@ export class Weapons {
 
     const start = muzzlePos ? muzzlePos.clone() : aim.origin.clone().addScaledVector(aim.dir, 1.2)
     const spread = def.spread * (ads ? 0.3 : 1)
-    let hitEnemy = false, killed = false, barrel = null, playerHit = null
+    let hitEnemy = false, killed = false, barrel = null, playerHit = null, headshot = false, dmgDealt = 0, hitPos = null
 
     for (let p = 0; p < def.pellets; p++) {
       const dir = aim.dir.clone()
@@ -114,15 +116,20 @@ export class Weapons {
         endPoint = hit.point.clone()
         const enemy = targets.find((t) => t.hitMesh === hit.object)
         const remote = hit.object.userData?.remote
+        // Headshot: hit point near the top of the ~1.8m capsule -> 2x damage.
+        const targetBaseY = enemy ? enemy.group.position.y : (remote ? remote.group.position.y : 0)
+        const isHead = (enemy || remote) && (hit.point.y - targetBaseY) > 1.45
+        const mult = isHead ? 2 : 1
         if (enemy) {
-          if (enemy.takeHit(def.damage)) killed = true
-          hitEnemy = true
-          this.impact(hit.point, 0xff5555)
-          this.particles?.emit(hit.point, 6, { color: [1, 0.25, 0.2], speed: 5, size: 0.55, life: 0.32 })
+          dmgDealt = def.damage * mult; hitPos = hit.point.clone()
+          if (enemy.takeHit(dmgDealt)) killed = true
+          hitEnemy = true; if (isHead) headshot = true
+          this.impact(hit.point, isHead ? 0xffffff : 0xff5555)
+          this.particles?.emit(hit.point, isHead ? 12 : 6, { color: [1, 0.25, 0.2], speed: 6, size: 0.55, life: 0.32 })
         } else if (remote) {
-          playerHit = remote.id
-          this.impact(hit.point, 0xff5555)
-          this.particles?.emit(hit.point, 6, { color: [1, 0.3, 0.3], speed: 5, size: 0.55, life: 0.32 })
+          playerHit = remote.id; dmgDealt = def.damage * mult; if (isHead) headshot = true; hitPos = hit.point.clone()
+          this.impact(hit.point, isHead ? 0xffffff : 0xff5555)
+          this.particles?.emit(hit.point, isHead ? 12 : 6, { color: [1, 0.3, 0.3], speed: 6, size: 0.55, life: 0.32 })
         } else {
           const b = findBarrel(hit.object)
           if (b) barrel = b
@@ -132,12 +139,12 @@ export class Weapons {
           }
         }
       }
-      this.beam(start, endPoint, 0xfff2a8)
+      this.beam(start, endPoint, def.tracer || 0xfff2a8)
     }
 
     this.flash(start, 0xffd24a)
     if (this.ammo <= 0) this.startReload()
-    return { fired: true, hit: hitEnemy, killed, barrel, playerHit }
+    return { fired: true, hit: hitEnemy, killed, barrel, playerHit, headshot, dmg: dmgDealt, hitPos }
   }
 
   // ---- Public combat FX (player weapon + enemies) ------------------------

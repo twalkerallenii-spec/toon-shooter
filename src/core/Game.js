@@ -164,19 +164,29 @@ export class Game {
     const sens = document.getElementById('set-sens')
     const invert = document.getElementById('set-invert')
     const tps = document.getElementById('set-tps')
+    const fov = document.getElementById('set-fov')
+    const vol = document.getElementById('set-vol')
+    const shadows = document.getElementById('set-shadows')
     sens.value = this.settings.sens
     invert.checked = this.settings.invertY
     tps.checked = !!this.settings.thirdPerson
+    fov.value = this.settings.fov ?? 72
+    vol.value = this.settings.volume ?? 0.5
+    shadows.checked = this.settings.shadows !== false
     const saveSettings = () => {
       this.settings.sens = parseFloat(sens.value)
       this.settings.invertY = invert.checked
       this.settings.thirdPerson = tps.checked
+      this.settings.fov = parseFloat(fov.value)
+      this.settings.volume = parseFloat(vol.value)
+      this.settings.shadows = shadows.checked
       localStorage.setItem('ts_settings', JSON.stringify(this.settings))
       this._applySettings()
     }
-    sens.addEventListener('input', saveSettings)
-    invert.addEventListener('change', saveSettings)
-    tps.addEventListener('change', saveSettings)
+    for (const el of [sens, invert, tps, fov, vol, shadows]) {
+      el.addEventListener('input', saveSettings); el.addEventListener('change', saveSettings)
+    }
+    this._applySettings() // apply saved fov/volume/shadows at startup
 
     this.input.onLockChange = (locked) => {
       // Losing the pointer lock mid-game = pause (desktop only).
@@ -358,7 +368,10 @@ export class Game {
     this._deadHandled = false
     this._lastAttacker = null
     this.remotePlayers = new Map() // id -> RemotePlayer (multiplayer)
-    this.player.onJumpPad = () => this.audio.jumpPad()
+    this.player.onJumpPad = () => { this.audio.jumpPad(); this.particles.emit({ x: this.player.position.x, y: 0.3, z: this.player.position.z }, 16, { color: [0.3, 0.9, 1], speed: 7, size: 0.6, life: 0.5, up: 4 }) }
+    this.player.onLand = (pos, dbl) => this.particles.emit({ x: pos.x, y: 0.2, z: pos.z }, dbl ? 10 : 8, { color: [0.75, 0.75, 0.7], speed: dbl ? 5 : 3, size: 0.6, life: 0.4, up: 1 })
+    this._shake = 0
+    this._streak = 0; this._lastKillT = -99; this._matchT = 0
     this.hud.clearKillFeed()
     this.hud.setStorm(false)
     this.hud.setStormTimer(null)
@@ -437,8 +450,15 @@ export class Game {
     this.hud.setLoading('DEPLOYING VEHICLES…', 82)
     await this._spawnCars()
 
-    // Battle Royale: scatter weapon loot around the map.
-    if (this.brMode) this.pickups.scatterWeapons(this.weapons.defs, 20, this.world.arenaRadius)
+    // Battle Royale: scatter weapon loot + shield/health around the map.
+    if (this.brMode) {
+      this.pickups.scatterWeapons(this.weapons.defs, 20, this.world.arenaRadius)
+      const HALF = this.world.arenaRadius
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * (HALF - 14)
+        this.pickups.spawn(Math.random() < 0.5 ? 'shield' : 'health', Math.cos(a) * r, Math.sin(a) * r)
+      }
+    }
 
     // CPU players per mode.
     if (this.brMode && !this.net) await this._spawnBots(12, 'fighter')
@@ -486,6 +506,23 @@ export class Game {
       // Gun Game: each kill promotes you to the next weapon.
       if (this.modeCfg?.gungame) { this.ggLevel++; this.weapons.switchTo(Math.min(this.ggLevel, this.weapons.defs.length - 1)) }
     }
+  }
+
+  // Floating damage number at a world point.
+  _damageNumber(worldPos, amount, head) {
+    const v = worldPos.clone().project(this.camera)
+    if (v.z > 1) return
+    const x = (v.x * 0.5 + 0.5) * window.innerWidth
+    const y = (-v.y * 0.5 + 0.5) * window.innerHeight
+    this.hud.damageNumber(x, y, amount, head)
+  }
+
+  // Track kill streaks and show a banner (Double/Triple/Multi/Rampage Kill).
+  _playerKill() {
+    const now = performance.now() / 1000
+    this._streak = (now - this._lastKillT < 4) ? this._streak + 1 : 1
+    this._lastKillT = now
+    if (this._streak >= 2) this.hud.killStreak(this._streak)
   }
 
   async _spawnCars() {
@@ -983,8 +1020,10 @@ export class Game {
       if (res.fired) {
         firedThisFrame = true
         if (res.tool === 'grapple') { this._fireGrapple() }
-        if (res.killed) { this.hud.hitMarker(true); this.audio.kill() }
-        else if (res.hit) { this.hud.hitMarker(false); this.audio.hit() }
+        // Floating damage number (white, gold on headshot).
+        if (res.dmg > 0 && res.hitPos) this._damageNumber(res.hitPos, Math.round(res.dmg), res.headshot)
+        if (res.killed) { this.hud.hitMarker(res.headshot ? 'kill' : true); this.audio.kill(); this._playerKill() }
+        else if (res.hit) { this.hud.hitMarker(res.headshot); this.audio.hit() }
         if (res.playerHit != null && this.net) {
           // Friendly fire off: don't damage teammates in Team Deathmatch.
           const victim = this.remotePlayers.get(res.playerHit)
@@ -1014,6 +1053,12 @@ export class Game {
 
     if (this.driving) this._driveUpdate(dt)
     else this.player.update(dt)
+    // Screen shake (explosions / taking damage).
+    if (this._shake > 0.01) {
+      this.camera.position.x += (Math.random() - 0.5) * this._shake
+      this.camera.position.y += (Math.random() - 0.5) * this._shake
+      this._shake *= Math.max(0, 1 - dt * 6)
+    }
     // Idle cars still settle (friction); the driven one is updated in _driveUpdate.
     for (const car of this.cars) if (car !== this.driving) car.update(dt)
 
@@ -1082,9 +1127,22 @@ export class Game {
       if (this.grenades[i].update(dt)) this.grenades.splice(i, 1)
     }
 
-    // Hurt sound when HP drops.
-    if (this.player.hp < this._prevHp) this.audio.hurt()
+    // Hurt feedback when HP drops: sound + shake + red flash.
+    if (this.player.hp < this._prevHp) { this.audio.hurt(); this._shake = Math.max(this._shake || 0, 0.35); this._hurtFlash = 0.6 }
     this._prevHp = this.player.hp
+    // Hurt vignette = damage flash + persistent low-HP glow.
+    this._hurtFlash = Math.max(0, (this._hurtFlash || 0) - dt * 1.5)
+    const lowHp = this.player.hp < 35 ? (1 - this.player.hp / 35) * 0.5 : 0
+    this.hud.setHurt(Math.max(this._hurtFlash, lowHp))
+
+    // Crosshair turns red when aiming at a target.
+    this._aimRay = this._aimRay || new THREE.Raycaster()
+    const aimR = this.player.getAimRay(); this._aimRay.set(aimR.origin, aimR.dir); this._aimRay.far = 200
+    const aimMeshes = []
+    for (const e of this.spawner.enemies) if (e.alive && e.hitMesh) aimMeshes.push(e.hitMesh)
+    for (const b of this.bots) if (b.alive && b.hitMesh) aimMeshes.push(b.hitMesh)
+    if (this.net) for (const rp of this.remotePlayers.values()) if (rp.hitMesh) aimMeshes.push(rp.hitMesh)
+    this.hud.setCrosshairEnemy(aimMeshes.length > 0 && this._aimRay.intersectObjects(aimMeshes, true).length > 0)
 
     // Multiplayer: broadcast local state + interpolate remote players.
     if (this.net) {
@@ -1119,6 +1177,8 @@ export class Game {
     }
 
     this.hud.setHp(this.player.hp, this.player.maxHp)
+    this.hud.setShield(this.player.shield)
+    this.hud.setCompass(this.player.yaw)
     this.hud.setAmmo(this.weapons.ammo, this.weapons.magazine)
 
     if (!this.player.alive && this.state === STATE.PLAYING) {
@@ -1148,6 +1208,8 @@ export class Game {
     this.particles.emit(pos, 40, { color: [0.18, 0.18, 0.18], speed: 6, spread: 5, size: 3.6, life: 1.2, gravity: 1.4, drag: 1.4, up: 3 })
     this.weapons.impact(pos, 0xffa030)
     this.audio.explosion()
+    const pdShake = Math.hypot(this.player.position.x - pos.x, this.player.position.z - pos.z)
+    if (pdShake < radius * 2) this._shake = Math.max(this._shake || 0, 0.5 * (1 - pdShake / (radius * 2)))
 
     for (const e of this.spawner.enemies) {
       if (!e.alive) continue
@@ -1188,9 +1250,16 @@ export class Game {
   }
 
   _applySettings() {
+    // Audio + renderer settings apply even before a player exists.
+    if (this.settings.volume != null) this.audio.setVolume(this.settings.volume)
+    if (this.settings.shadows != null) this.renderer.shadowMap.enabled = this.settings.shadows
+    if (this.settings.fov != null) {
+      this.camera.fov = this.settings.fov; this.camera.updateProjectionMatrix()
+    }
     if (!this.player) return
     this.player.mouseSensitivity = 0.0022 * this.settings.sens
     this.player.invertY = this.settings.invertY
+    if (this.settings.fov != null) this.player.baseFov = this.settings.fov
     this.player.setThirdPerson(!!this.settings.thirdPerson)
     // Lazily load the player body model when third-person is first enabled.
     if (this.settings.thirdPerson && !this.player.body) {
@@ -1230,8 +1299,9 @@ export class Game {
       ctx.fillStyle = color
       ctx.beginPath(); ctx.arc(sx(x), sz(z), r, 0, Math.PI * 2); ctx.fill()
     }
-    for (const it of this.pickups.items) dot(it.x, it.z, it.type === 'health' ? '#4ade80' : '#ffcb3d', 2.5)
+    for (const it of this.pickups.items) dot(it.x, it.z, it.type === 'health' ? '#4ade80' : it.type === 'shield' ? '#3da9fc' : it.type === 'weapon' ? '#9ad0ff' : '#ffcb3d', 2.5)
     for (const e of this.spawner.enemies) if (e.alive) dot(e.group.position.x, e.group.position.z, '#ff5555')
+    for (const b of this.bots) if (b.alive) dot(b.group.position.x, b.group.position.z, b.role === 'hider' ? '#ffd24a' : '#ff7a3d')
     if (this.net) for (const rp of this.remotePlayers.values()) dot(rp.group.position.x, rp.group.position.z, '#5ab0ff')
 
     // Player as a heading triangle.

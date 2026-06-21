@@ -15,11 +15,13 @@ export class Audio {
       if (!AC) { this.enabled = false; return }
       this.ctx = new AC()
       this.master = this.ctx.createGain()
-      this.master.gain.value = 0.5
+      this.master.gain.value = this._vol ?? 0.5
       this.master.connect(this.ctx.destination)
     }
     if (this.ctx.state === 'suspended') this.ctx.resume()
   }
+
+  setVolume(v) { this._vol = v; if (this.master) this.master.gain.value = v }
 
   get t() { return this.ctx.currentTime }
 
