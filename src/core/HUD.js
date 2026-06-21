@@ -155,6 +155,23 @@ export class HUD {
     el.classList.add('show')
   }
 
+  // Flash a red arc around the crosshair pointing toward the damage source.
+  // angleRad is the bearing relative to where the player is looking (0 = front).
+  damageFrom(angleRad) {
+    if (!this._dmgEl) {
+      const wrap = document.createElement('div')
+      wrap.className = 'dmg-dir'
+      wrap.innerHTML = '<div class="dmg-arc"></div>'
+      document.body.appendChild(wrap)
+      this._dmgEl = wrap
+    }
+    const el = this._dmgEl
+    el.style.transform = `translate(-50%,-50%) rotate(${angleRad}rad)`
+    el.classList.remove('show')
+    void el.offsetWidth
+    el.classList.add('show')
+  }
+
   // ---- Live chat ----------------------------------------------------------
   addChat(name, text, { self = false, near = true } = {}) {
     if (!this.el.chatLog) return

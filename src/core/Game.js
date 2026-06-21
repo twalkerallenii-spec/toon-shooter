@@ -2046,8 +2046,30 @@ export class Game {
       if (this.grenades[i].update(dt)) this.grenades.splice(i, 1)
     }
 
-    // Hurt feedback when HP drops: sound + shake + red flash.
-    if (this.player.hp < this._prevHp) { this.audio.hurt(); this._shake = Math.max(this._shake || 0, 0.35); this._hurtFlash = 0.6 }
+    // Hurt feedback when HP drops: sound + shake + red flash + direction arc.
+    if (this.player.hp < this._prevHp) {
+      this.audio.hurt(); this._shake = Math.max(this._shake || 0, 0.35); this._hurtFlash = 0.6
+      // Point a red arc toward whoever hurt us (remote shooter, else nearest threat).
+      let src = null
+      if (this.net && this._lastAttacker != null && this.remotePlayers.has(this._lastAttacker)) src = this.remotePlayers.get(this._lastAttacker).group?.position
+      if (!src) {
+        let bd = Infinity
+        const consider = [...this.bots, ...this.spawner.enemies]
+        for (const e of consider) {
+          if (!e.alive) continue
+          const ep = e.position || e.group?.position; if (!ep) continue
+          const d = (ep.x - this.player.position.x) ** 2 + (ep.z - this.player.position.z) ** 2
+          if (d < bd) { bd = d; src = ep }
+        }
+      }
+      if (src) {
+        const P = this.player.position
+        const ang = Math.atan2(src.x - P.x, src.z - P.z)
+        const aim = this.player.getAimRay()
+        const face = Math.atan2(aim.dir.x, aim.dir.z)
+        this.hud.damageFrom(ang - face)
+      }
+    }
     this._prevHp = this.player.hp
     // Hurt vignette = damage flash + persistent low-HP glow.
     this._hurtFlash = Math.max(0, (this._hurtFlash || 0) - dt * 1.5)
@@ -2393,16 +2415,35 @@ export class Game {
     obj.position.set(tx, baseY + obj.userData.localY, tz)
     obj.rotation.y = yawSnap
     this.world.scene.add(obj)
-    const wb = new THREE.Box3().setFromObject(obj)
-    const plat = {
-      minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z,
-      top: wb.max.y, bottom: wb.min.y, climbable: this.buildPiece !== 'wall',
-    }
-    this.world.platforms.push(plat)
+    this._builds = this._builds || []
     const obstacle = { mesh: obj, radius: 2, x: tx, z: tz }
     this.world.obstacles.push(obstacle)
-    this._builds = this._builds || []
-    this._builds.push({ obj, plat, obstacle })
+
+    if (this.buildPiece === 'ramp') {
+      // A ramp must be WALKABLE: model it as 8 stacked 0.5u steps (= the player's
+      // auto-step height) rising along the facing direction. A single flat-top box
+      // would behave like a wall and block you.
+      const fwd = new THREE.Vector3(Math.sin(yawSnap), 0, Math.cos(yawSnap))
+      const alongX = Math.abs(fwd.x) > Math.abs(fwd.z)
+      const N = 8
+      for (let i = 0; i < N; i++) {
+        const f = (i + 0.5) / N
+        const off = -2 + f * 4
+        const sx = tx + fwd.x * off, sz = tz + fwd.z * off
+        const top = baseY + f * 4
+        const plat = alongX
+          ? { minX: sx - 0.35, maxX: sx + 0.35, minZ: tz - 2, maxZ: tz + 2, top, bottom: baseY, climbable: true }
+          : { minX: tx - 2, maxX: tx + 2, minZ: sz - 0.35, maxZ: sz + 0.35, top, bottom: baseY, climbable: true }
+        this.world.platforms.push(plat)
+      }
+    } else {
+      const wb = new THREE.Box3().setFromObject(obj)
+      this.world.platforms.push({
+        minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z,
+        top: wb.max.y, bottom: wb.min.y, climbable: this.buildPiece !== 'wall',
+      })
+    }
+    this._builds.push({ obj, obstacle })
     this.audio?.pickup?.()
     this.particles?.emit({ x: tx, y: baseY + 1, z: tz }, 8, { color: [0.5, 0.8, 1], speed: 3, spread: 2, size: 0.8, life: 0.4, up: 2 })
   }
