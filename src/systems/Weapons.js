@@ -15,6 +15,7 @@ export const WEAPONS = [
   { key: 'RPG',     model: 'RocketLauncher', ico: '🚀', rarity: 'legendary', label: 'Rocket Launcher', damage: 0, fireRate: 0.7, mag: 2, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.6, adsFov: 62, recoil: 0.24, projectile: 'rocket' },
   { key: 'Knife',   model: 'Knife_1', ico: '🔪', rarity: 'common', label: 'Knife', damage: 75, fireRate: 2.4, mag: 99, spread: 0, pellets: 1, auto: false, range: 4.5, reload: 0.1, adsFov: 70, recoil: 0.06, tracer: 0xffffff, melee: true },
   { key: 'Zip',     model: 'Pistol', ico: '🪝', rarity: 'uncommon', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
+  { key: 'SuperGun', model: 'Shotgun', ico: '🔵', rarity: 'legendary', label: 'Super Gun', damage: 0, fireRate: 1.3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 1.6, adsFov: 60, recoil: 0.2, projectile: 'energy', tracer: 0x44aaff, secret: true },
 ]
 
 // Hitscan shooting for a roster of weapons + lightweight combat FX (tracers,

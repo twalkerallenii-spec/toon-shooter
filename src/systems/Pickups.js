@@ -73,7 +73,7 @@ export class Pickups {
 
   // Scatter weapon loot across the map (Battle Royale).
   scatterWeapons(defs, count, half) {
-    const pickable = defs.map((d, i) => ({ index: i, model: d.model, key: d.key })).filter((d) => d.key !== 'Zip')
+    const pickable = defs.map((d, i) => ({ index: i, model: d.model, key: d.key, secret: d.secret })).filter((d) => d.key !== 'Zip' && !d.secret)
     for (let i = 0; i < count; i++) {
       const d = pickable[Math.floor(Math.random() * pickable.length)]
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * (half - 12)

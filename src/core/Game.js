@@ -487,14 +487,14 @@ export class Game {
     s.matches = (s.matches || 0) + 1
     s.kills = (s.kills || 0) + k
     s.wins = (s.wins || 0) + (won ? 1 : 0)
-    s.xp = (s.xp || 0) + (won ? 300 : 120) + k * 20
+    s.xp = (s.xp || 0) + (won ? 500 : 200) + k * 30
     localStorage.setItem('ts_stats', JSON.stringify(s))
     // Coins: earn from kills + a win bonus.
     const coinGain = k * 10 + (won ? 100 : 25)
     this._setCoins(this._coins() + coinGain)
     // Stash this match's recap for the end screen.
     const deaths = this.net ? (this.deaths || 0) : (this.player?.alive ? 0 : 1)
-    const xpGain = (won ? 300 : 120) + k * 20
+    const xpGain = (won ? 500 : 200) + k * 30
     this._summary = { kills: k, deaths, kd: (k / Math.max(1, deaths)).toFixed(2), xp: xpGain, coins: coinGain, won }
     this._showSaving(k, xpGain, coinGain) // visible "saving kills & XP" confirmation
     this._populateLobby() // refresh lobby stats immediately (even on Play Again)
@@ -936,6 +936,18 @@ export class Game {
   }
   _sendChat(text) {
     if (!text) return
+    // Admin cheat: /supergun gives the blue energy Super Gun (handled locally,
+    // not broadcast).
+    if (text.toLowerCase() === '/supergun') {
+      const i = this.weapons.defs.findIndex((d) => d.key === 'SuperGun')
+      if (i >= 0 && this.state === STATE.PLAYING) {
+        this.weapons.give(i); this.hud.setOwned(this.weapons.owned)
+        this.hud.addChat('System', '🔵 SUPER GUN equipped — fire blue energy blasts!', { self: true })
+      } else {
+        this.hud.addChat('System', 'Start a match first, then /supergun.', { self: true })
+      }
+      return
+    }
     if (this.net) this.net.sendChat(text)
     else this.hud.addChat(this._selfName || 'You', text, { self: true, near: true }) // offline echo
   }
@@ -1012,7 +1024,7 @@ export class Game {
       if (this.modeCfg?.gungame) {
         this.ggLevel++
         const pool = this.weapons.defs.map((d, i) => i).filter((i) => {
-          const d = this.weapons.defs[i]; return !d.tool && !d.melee
+          const d = this.weapons.defs[i]; return !d.tool && !d.melee && !d.secret
         })
         const idx = pool[Math.floor(Math.random() * pool.length)]
         this.weapons.give(idx)
@@ -1716,6 +1728,8 @@ export class Game {
             onExplode: (p) => this.explodeAt(p, { radius: 11, damage: 170 }),
           }))
         }
+        // Super Gun: a huge blue energy blast.
+        if (res.projectile === 'energy') this._fireEnergy(res.origin.clone(), res.dir.clone())
         // Broadcast the shot so other players see a tracer.
         if (this.net) {
           const aim = this.player.getAimRay()
@@ -1908,11 +1922,17 @@ export class Game {
   }
 
   // Generic explosion at a point — used by barrels and grenades.
-  explodeAt(pos, { radius = 8, damage = 120, depth = 0 } = {}) {
-    this.particles.emit(pos, 64, { color: [1, 0.55, 0.12], speed: 15, spread: 11, size: 2.4, life: 0.5, gravity: -2, drag: 3, up: 4 })
-    this.particles.emit(pos, 28, { color: [1, 0.92, 0.45], speed: 22, spread: 14, size: 1.0, life: 0.32, gravity: -2, drag: 4 })
-    this.particles.emit(pos, 40, { color: [0.18, 0.18, 0.18], speed: 6, spread: 5, size: 3.6, life: 1.2, gravity: 1.4, drag: 1.4, up: 3 })
-    this.weapons.impact(pos, 0xffa030)
+  explodeAt(pos, { radius = 8, damage = 120, depth = 0, energy = false } = {}) {
+    if (energy) {
+      this.particles.emit(pos, 90, { color: [0.3, 0.7, 1], speed: 20, spread: 13, size: 3.0, life: 0.55, gravity: -1, drag: 3, up: 5 })
+      this.particles.emit(pos, 44, { color: [0.7, 0.95, 1], speed: 28, spread: 16, size: 1.2, life: 0.35, gravity: -1, drag: 4 })
+      this.weapons.impact(pos, 0x44aaff)
+    } else {
+      this.particles.emit(pos, 64, { color: [1, 0.55, 0.12], speed: 15, spread: 11, size: 2.4, life: 0.5, gravity: -2, drag: 3, up: 4 })
+      this.particles.emit(pos, 28, { color: [1, 0.92, 0.45], speed: 22, spread: 14, size: 1.0, life: 0.32, gravity: -2, drag: 4 })
+      this.particles.emit(pos, 40, { color: [0.18, 0.18, 0.18], speed: 6, spread: 5, size: 3.6, life: 1.2, gravity: 1.4, drag: 1.4, up: 3 })
+      this.weapons.impact(pos, 0xffa030)
+    }
     this.audio.explosion()
     const pdShake = Math.hypot(this.player.position.x - pos.x, this.player.position.z - pos.z)
     if (pdShake < radius * 2) this._shake = Math.max(this._shake || 0, 0.5 * (1 - pdShake / (radius * 2)))
@@ -1928,8 +1948,19 @@ export class Game {
         }
       }
     }
+    // Bots (FFA/BR/etc.) — count as player kills.
+    for (const b of this.bots) {
+      if (!b.alive) continue
+      const d = Math.hypot(b.position.x - pos.x, b.position.z - pos.z)
+      if (d < radius) b.applyDamage?.(damage * (1 - d / radius), null)
+    }
+    // Remote players (online): claim hits.
+    if (this.net) for (const rp of this.remotePlayers.values()) {
+      const d = Math.hypot(rp.group.position.x - pos.x, rp.group.position.z - pos.z)
+      if (d < radius) this.net.sendHit(rp.id, damage * (1 - d / radius))
+    }
     const pd = Math.hypot(this.player.position.x - pos.x, this.player.position.z - pos.z)
-    if (pd < radius && this.player.alive) this.player.takeDamage((damage * 0.36) * (1 - pd / radius))
+    if (pd < radius && this.player.alive && !energy) this.player.takeDamage((damage * 0.36) * (1 - pd / radius))
 
     // Chain nearby barrels.
     if (depth < 6) {
@@ -1940,6 +1971,52 @@ export class Game {
         }
       }
     }
+  }
+
+  // Super Gun projectile: a fast glowing blue energy orb with a particle trail
+  // that detonates in a big blue blast on contact. Duck-typed into this.grenades.
+  _fireEnergy(origin, dir) {
+    const grp = new THREE.Group()
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), new THREE.MeshBasicMaterial({ color: 0x9fe0ff })))
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 16), new THREE.MeshBasicMaterial({ color: 0x2a88ff, transparent: true, opacity: 0.35, depthWrite: false })))
+    grp.add(new THREE.PointLight(0x44aaff, 3, 16))
+    grp.position.copy(origin)
+    this.world.scene.add(grp)
+    const vel = dir.clone().multiplyScalar(72)
+    this._energyRay = this._energyRay || new THREE.Raycaster()
+    const ray = this._energyRay
+    const game = this
+    const blast = {
+      pos: origin.clone(), prev: origin.clone(), life: 2.4, _t: 0, group: grp,
+      dispose() { if (grp.parent) grp.parent.remove(grp); grp.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() }) },
+      update(dt) {
+        this._t += dt
+        this.prev.copy(this.pos); this.pos.addScaledVector(vel, dt); grp.position.copy(this.pos)
+        grp.children[0].scale.setScalar(1 + Math.sin(this._t * 30) * 0.12)
+        game.particles.emit(this.pos, 5, { color: [0.35, 0.7, 1], speed: 4, spread: 1.2, size: 1.3, life: 0.35, drag: 4 })
+        this.life -= dt
+        // Detonate on hitting the world, a combatant, the ground, or on timeout.
+        let hit = null
+        const seg = new THREE.Vector3().subVectors(this.pos, this.prev); const len = seg.length()
+        if (len > 0.001 && game.world.obstacles.length) {
+          ray.set(this.prev, seg.normalize()); ray.far = len
+          const hs = ray.intersectObjects(game.world.obstacles.map((o) => o.mesh), true)
+          if (hs.length) hit = hs[0].point
+        }
+        if (!hit) {
+          for (const t of [...game.bots, ...game.spawner.enemies]) {
+            const p = t.position || t.group.position
+            if (t.alive && Math.hypot(p.x - this.pos.x, p.z - this.pos.z) < 1.8) { hit = this.pos.clone(); break }
+          }
+        }
+        if (hit || this.life <= 0 || this.pos.y < 0.3) {
+          game.explodeAt(hit || this.pos, { radius: 14, damage: 260, energy: true })
+          this.dispose(); return true
+        }
+        return false
+      },
+    }
+    this.grenades.push(blast)
   }
 
   throwGrenade() {
