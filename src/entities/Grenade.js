@@ -1,15 +1,20 @@
 import * as THREE from 'three'
 
-// A thrown grenade: arcs under gravity, bounces off the ground, and explodes when
-// its fuse runs out. Visual is the kit Grenade model (placeholder sphere until it
-// loads). Calls onExplode(position) when it goes off.
+const RAY = new THREE.Raycaster()
+const STEP = new THREE.Vector3()
+
+// A thrown/launched grenade: arcs under gravity. With `impact` it detonates the
+// instant it touches the ground or any solid object; otherwise it bounces and
+// explodes on its fuse. Calls onExplode(position) when it goes off.
 export class Grenade {
-  constructor({ world, assets, position, velocity, onExplode, fuse = 1.6 }) {
+  constructor({ world, assets, position, velocity, onExplode, fuse = 1.6, impact = false }) {
     this.world = world
     this.onExplode = onExplode
     this.fuse = fuse
+    this.impact = impact
     this.exploded = false
     this.pos = position.clone()
+    this.prev = position.clone()
     this.vel = velocity.clone()
     this.gravity = -20
     this.radius = 0.2
@@ -36,16 +41,37 @@ export class Grenade {
     })
   }
 
+  _explode(at) {
+    if (this.exploded) return true
+    this.exploded = true
+    this.onExplode?.((at || this.pos).clone())
+    this.dispose()
+    return true
+  }
+
   // Returns true when it has exploded (caller removes it).
   update(dt) {
     if (this.exploded) return true
     this.fuse -= dt
+    this.prev.copy(this.pos)
     this.vel.y += this.gravity * dt
     this.pos.addScaledVector(this.vel, dt)
 
-    // Bounce off the ground.
+    // Impact: detonate on first contact with a solid object along this step.
+    if (this.impact && this.world.obstacles?.length) {
+      STEP.subVectors(this.pos, this.prev)
+      const len = STEP.length()
+      if (len > 0.0001) {
+        RAY.set(this.prev, STEP.normalize()); RAY.far = len + this.radius
+        const hits = RAY.intersectObjects(this.world.obstacles.map((o) => o.mesh), true)
+        if (hits.length) return this._explode(hits[0].point)
+      }
+    }
+
+    // Ground contact: impact grenades blow up; others bounce.
     if (this.pos.y <= this.radius) {
       this.pos.y = this.radius
+      if (this.impact) return this._explode()
       this.vel.y *= -0.45
       this.vel.x *= 0.7; this.vel.z *= 0.7
     }
@@ -54,12 +80,7 @@ export class Grenade {
     this.group.rotation.x += dt * 6
     this.group.rotation.y += dt * 4
 
-    if (this.fuse <= 0) {
-      this.exploded = true
-      this.onExplode?.(this.pos.clone())
-      this.dispose()
-      return true
-    }
+    if (this.fuse <= 0) return this._explode()
     return false
   }
 

@@ -51,6 +51,7 @@ export class Net {
       case 'ctf': this.handlers.onCtf?.(msg.ctf); break
       case 'win': this.handlers.onWin?.(msg); break
       case 'chat': this.handlers.onChat?.(msg.id, msg.name, msg.text, msg.p); break
+      case 'rtc': this.handlers.onRtc?.(msg.from, msg.data); break
     }
   }
 
@@ -80,6 +81,10 @@ export class Net {
 
   sendChat(text) {
     if (this.connected) this._send({ t: 'chat', text })
+  }
+
+  sendRtc(to, data) {
+    if (this.connected) this._send({ t: 'rtc', to, data })
   }
 
   // Capture the Flag events.

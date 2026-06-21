@@ -184,6 +184,13 @@ wss.on('connection', (ws) => {
         if (text) broadcast(room, { t: 'chat', id: ws.id, name: me?.name || 'Player', text, p: me?.state || null })
         break
       }
+      // WebRTC voice signalling: forward an offer/answer/ICE to one peer.
+      case 'rtc': {
+        for (const [, peer] of room) {
+          if (peer.ws.id === msg.to) { send(peer.ws, { t: 'rtc', from: ws.id, data: msg.data }); break }
+        }
+        break
+      }
 
       // ---- Capture the Flag ----
       case 'flagTake': {

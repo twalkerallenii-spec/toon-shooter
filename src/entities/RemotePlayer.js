@@ -120,6 +120,7 @@ export class RemotePlayer {
 
   setState(p) {
     if (!p) return
+    this.voice = !!p.voice // does this peer have mic chat on?
     if (p.skin && p.skin !== this.skin) this.setSkin(p.skin)
     if (p.wpn != null && p.wpn !== this.wpn) this.setHeldWeapon(p.wpn)
     this.target.set(p.x, p.y, p.z)

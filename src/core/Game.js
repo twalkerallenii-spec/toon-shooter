@@ -16,6 +16,7 @@ import { Vehicle } from '../entities/Vehicle.js'
 import { Bot } from '../entities/Bot.js'
 import { Grenade } from '../entities/Grenade.js'
 import { Net } from '../net/Net.js'
+import { Voice } from '../net/Voice.js'
 import { RemotePlayer } from '../entities/RemotePlayer.js'
 import { SKINS, skinOf, applyTint } from './skins.js'
 
@@ -252,6 +253,15 @@ export class Game {
     document.getElementById('chat-btn')?.addEventListener('click', () => {
       if (this.state === STATE.PLAYING) this._chatOpen ? this._closeChat() : this._openChat()
     })
+    // Proximity voice toggle.
+    const micBtn = document.getElementById('mic-btn')
+    micBtn?.addEventListener('click', async () => {
+      if (!this.voice) { this.hud.addChat('System', 'Voice needs an online match.', { self: true }); return }
+      const on = await this.voice.toggle()
+      micBtn.classList.toggle('on', on)
+      this.hud.addChat('System', on ? '🎤 Voice ON — talk to nearby players.' : '🔇 Voice off.', { self: true })
+    })
+
     const chatInput = this.hud.el.chatInput
     chatInput?.addEventListener('keydown', (e) => {
       e.stopPropagation()
@@ -1101,6 +1111,7 @@ export class Game {
     this.net = new Net({
       url, name, room, mode: this.onlineMode,
       handlers: {
+        onRtc: (fromId, data) => this.voice?.onSignal(fromId, data),
         onWelcome: async (id, peers, team) => {
           status.textContent = ''
           this.myTeam = team
@@ -1177,6 +1188,7 @@ export class Game {
     })
     this.peerNames = new Map([[this.net?.id, name]]) // updated on welcome
     this._selfName = name
+    this.voice = new Voice(this.net) // proximity mic chat (opt-in via 🎤)
   }
 
   _addRemote(id, name, state, team) {
@@ -1443,6 +1455,7 @@ export class Game {
   }
 
   _disconnect() {
+    if (this.voice) { this.voice.disable(); this.voice = null }
     if (this.net) { this.net.close(); this.net = null }
     if (this.remotePlayers) {
       for (const rp of this.remotePlayers.values()) rp.dispose()
@@ -1547,15 +1560,15 @@ export class Game {
         if (res.projectile === 'grenade') {
           const v = res.dir.clone().multiplyScalar(42); v.y += 2
           this.grenades.push(new Grenade({
-            world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 1.4,
+            world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 3.0, impact: true,
             onExplode: (p) => this.explodeAt(p, { radius: 8, damage: 120 }),
           }))
         }
-        // Rocket launcher: fast, flat, big boom.
+        // Rocket launcher: fast, flat, big boom on impact.
         if (res.projectile === 'rocket') {
           const v = res.dir.clone().multiplyScalar(70)
           this.grenades.push(new Grenade({
-            world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 2.4,
+            world: this.world, assets: this.assets, position: res.origin.clone(), velocity: v, fuse: 3.0, impact: true,
             onExplode: (p) => this.explodeAt(p, { radius: 11, damage: 170 }),
           }))
         }
@@ -1683,9 +1696,10 @@ export class Game {
       this.net.sendState({
         x: this.player.position.x, y: this.player.position.y, z: this.player.position.z,
         yaw: this.player.yaw, pitch: this.player.pitch, hp: this.player.hp,
-        wpn: this.weapons.index, moving: this.player.moving, skin: this.character,
+        wpn: this.weapons.index, moving: this.player.moving, skin: this.character, voice: !!this.voice?.on,
       }, performance.now())
       for (const rp of this.remotePlayers.values()) rp.update(dt, this.camera)
+      this.voice?.update(this.player.position, this.remotePlayers)
     }
 
     // Fortnite-style dynamic reticle: bloom out when moving/firing/airborne.
@@ -1779,7 +1793,7 @@ export class Game {
     const vel = aim.dir.clone().multiplyScalar(20)
     vel.y += 4 // slight lob
     this.grenades.push(new Grenade({
-      world: this.world, assets: this.assets, position: start, velocity: vel,
+      world: this.world, assets: this.assets, position: start, velocity: vel, fuse: 3.0, impact: true,
       onExplode: (p) => this.explodeAt(p, { radius: 7, damage: 110 }),
     }))
   }
