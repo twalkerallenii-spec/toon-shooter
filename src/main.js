@@ -1,4 +1,5 @@
 import './style.css'
+import './ui/uiAssets.js' // FPS UI Pack → CSS variables
 import { Game } from './core/Game.js'
 
 const canvas = document.getElementById('game')

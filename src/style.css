@@ -730,3 +730,87 @@ body.touch #rank-btn { display: block; }
   font-size: 14px; opacity: 0.8;
 }
 .controls b { color: var(--accent); }
+
+/* ============================================================
+   FPS UI Pack skin — applied via CSS vars set in src/ui/uiAssets.js.
+   Guarded by .ui-pack so the game still works if assets fail to load.
+   ============================================================ */
+.ui-pack .logo {
+  font-family: 'Arial Black', Impact, sans-serif;
+  transform: skewX(-6deg);
+  -webkit-text-stroke: 1.5px #000; letter-spacing: 2px;
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.8);
+}
+
+/* Top tabs → tab sprites */
+.ui-pack .top-tab {
+  background: var(--ui-tab) center/100% 100% no-repeat;
+  border: none; color: rgba(255,255,255,0.7);
+  font-family: 'Arial Black', Impact, sans-serif; transform: skewX(-6deg);
+  padding: 10px 26px 12px; text-shadow: 2px 2px 0 #000;
+}
+.ui-pack .top-tab > * { display: inline-block; transform: skewX(6deg); }
+.ui-pack .top-tab.active { background-image: var(--ui-tab-active); color: #fff; }
+
+/* Primary START button → PlayBtn sprite */
+.ui-pack #start-btn {
+  background: var(--ui-play) center/100% 100% no-repeat;
+  border: none; box-shadow: none; border-radius: 0;
+  color: #fff; font-family: 'Arial Black', Impact, sans-serif;
+  letter-spacing: 2px; text-shadow: 0 2px 0 #000, 0 0 8px rgba(0,0,0,0.7);
+  min-height: 70px; padding: 14px 10px;
+}
+.ui-pack #start-btn:active { background-image: var(--ui-play-pressed); }
+
+/* Secondary buttons → Btn sprite */
+.ui-pack .alt-btn,
+.ui-pack #online-btn,
+.ui-pack #victory-btn,
+.ui-pack #pause-resume,
+.ui-pack #pause-quit,
+.ui-pack #invite-btn,
+.ui-pack #br-btn {
+  background: var(--ui-btn) center/100% 100% no-repeat;
+  border: none; box-shadow: none; border-radius: 0;
+  color: #fff; text-shadow: 0 2px 0 #000; letter-spacing: 1px;
+  min-height: 44px;
+}
+.ui-pack .alt-btn:active,
+.ui-pack #online-btn:active,
+.ui-pack #victory-btn:active,
+.ui-pack #pause-resume:active,
+.ui-pack #pause-quit:active,
+.ui-pack #invite-btn:active,
+.ui-pack #br-btn:active { background-image: var(--ui-btn-pressed); }
+
+/* Lobby card + info panels → 9-sliced framed panels */
+.ui-pack .lobby-card,
+.ui-pack .lobby-panel,
+.ui-pack #pausebox .pausebox-inner,
+.ui-pack #victory .vic-inner {
+  background-color: transparent; background-image: none;
+  border-style: solid; border-width: 15px; border-radius: 0;
+  border-image-source: var(--ui-frame);
+  border-image-slice: 38 fill;
+  border-image-width: 15px;
+  border-image-repeat: stretch;
+  backdrop-filter: none;
+}
+
+/* Currency chip → dark container + coin icon */
+.ui-pack .player-chip {
+  background: var(--ui-darkbg) center/100% 100% no-repeat;
+  border: none; padding: 6px 16px; font-family: 'Arial Black', Impact, sans-serif;
+}
+.ui-pack .player-chip .vbuck {
+  display: inline-block; width: 20px; height: 20px; vertical-align: middle;
+  background: var(--ui-coin) center/contain no-repeat; color: transparent; font-size: 0;
+}
+
+/* XP / season bars → level-bar sprite fill */
+.ui-pack #pc-xpfill, .ui-pack #sb-fill {
+  background: var(--ui-levelbar) left center / auto 100% repeat-x;
+}
+
+/* Loading screen backdrop */
+.ui-pack #loading { background: var(--ui-bg) center/cover no-repeat, #0b1020; }
