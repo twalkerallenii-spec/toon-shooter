@@ -50,6 +50,7 @@ export class Net {
       case 'mapChange': this.handlers.onMapChange?.(msg.map); break
       case 'ctf': this.handlers.onCtf?.(msg.ctf); break
       case 'win': this.handlers.onWin?.(msg); break
+      case 'chat': this.handlers.onChat?.(msg.id, msg.name, msg.text, msg.p); break
     }
   }
 
@@ -75,6 +76,10 @@ export class Net {
 
   sendVote(map) {
     if (this.connected) this._send({ t: 'vote', map })
+  }
+
+  sendChat(text) {
+    if (this.connected) this._send({ t: 'chat', text })
   }
 
   // Capture the Flag events.

@@ -179,6 +179,11 @@ wss.on('connection', (ws) => {
       case 'vote':
         handleVote(room, ws.id, msg.map)
         break
+      case 'chat': {
+        const text = String(msg.text || '').slice(0, 140)
+        if (text) broadcast(room, { t: 'chat', id: ws.id, name: me?.name || 'Player', text, p: me?.state || null })
+        break
+      }
 
       // ---- Capture the Flag ----
       case 'flagTake': {

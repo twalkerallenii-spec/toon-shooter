@@ -209,8 +209,8 @@ export class Game {
     this._applySettings() // apply saved fov/volume/shadows at startup
 
     this.input.onLockChange = (locked) => {
-      // Losing the pointer lock mid-game = pause (desktop only).
-      if (!this.input.isTouch && !locked && this.state === STATE.PLAYING) this.pause()
+      // Losing the pointer lock mid-game = pause (desktop only) — unless chatting.
+      if (!this.input.isTouch && !locked && this.state === STATE.PLAYING && !this._chatOpen) this.pause()
     }
 
     // Pointer lock can't be requested right after an async load (no user
@@ -225,6 +225,8 @@ export class Game {
       if (e.code === 'Tab') { e.preventDefault(); if (this.state === STATE.PLAYING && !e.repeat) this.weapons.cycle(1) }
       // X discards the current weapon (drops it as loot).
       if (e.code === 'KeyX' && this.state === STATE.PLAYING && !e.repeat) this._discardWeapon()
+      // Enter opens chat.
+      if (e.code === 'Enter' && this.state === STATE.PLAYING && !this._chatOpen && !e.repeat) { e.preventDefault(); this._openChat() }
     })
 
     // Mobile RANK button (toggle).
@@ -243,6 +245,18 @@ export class Game {
     this.hud.el.overlay?.addEventListener('click', () => {
       this.audio.resume()
       if (this.state === STATE.MENU) this.audio.startMusic()
+    })
+
+    // ---- Live chat ----
+    this._chatOpen = false
+    document.getElementById('chat-btn')?.addEventListener('click', () => {
+      if (this.state === STATE.PLAYING) this._chatOpen ? this._closeChat() : this._openChat()
+    })
+    const chatInput = this.hud.el.chatInput
+    chatInput?.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.code === 'Enter') { this._sendChat(chatInput.value.trim()); this._closeChat() }
+      else if (e.code === 'Escape') this._closeChat()
     })
 
     // Victory screen -> back to the lobby.
@@ -776,6 +790,23 @@ export class Game {
     this.hud.addKillFeed(`🧟 ${bot.name} got infected!`)
   }
 
+  _openChat() {
+    this._chatOpen = true
+    if (!this.input.isTouch) this.input.exitLock() // free the cursor to type (guarded: no pause)
+    this.hud.openChatInput()
+  }
+  _closeChat() {
+    this._chatOpen = false
+    this.hud.closeChatInput()
+    // Re-grab the pointer so you can keep playing (desktop).
+    if (this.state === STATE.PLAYING && !this.input.isTouch && !this.input.locked) this.input.requestLock()
+  }
+  _sendChat(text) {
+    if (!text) return
+    if (this.net) this.net.sendChat(text)
+    else this.hud.addChat(this._selfName || 'You', text, { self: true, near: true }) // offline echo
+  }
+
   // Drop the current weapon as loot (X / DROP button). Keeps knife + grapple.
   _discardWeapon() {
     const i = this.weapons.index
@@ -1110,6 +1141,14 @@ export class Game {
             this.weapons.beam(a, new THREE.Vector3(to[0], to[1], to[2]), 0x9ad0ff, 0.06)
             this.weapons.flash(a, 0xffd24a) // muzzle flash at the shooter
           }
+        },
+        onChat: (id, name, text, p) => {
+          // Proximity: in a match, dim/mark messages from far-away players.
+          let near = true
+          if (this.state === STATE.PLAYING && p && this.player) {
+            near = Math.hypot(this.player.position.x - p[0], this.player.position.z - p[2]) < 45
+          }
+          this.hud.addChat(name, text, { self: id === this.net?.id, near })
         },
         onHit: (fromId, dmg) => {
           if (!this.player.alive) return

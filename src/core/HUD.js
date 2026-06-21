@@ -30,6 +30,8 @@ export class HUD {
       adsVignette: document.getElementById('ads-vignette'),
       scoreboard: document.getElementById('scoreboard'),
       sbBody: document.getElementById('sb-body'),
+      chatLog: document.getElementById('chat-log'),
+      chatInput: document.getElementById('chat-input'),
       victory: document.getElementById('victory'),
       vicTitle: document.getElementById('vic-title'),
       vicSub: document.getElementById('vic-sub'),
@@ -131,6 +133,29 @@ export class HUD {
   // Green full-screen tint while the player is a zombie (Infection).
   setZombie(on) {
     document.getElementById('zombie-tint')?.classList.toggle('on', !!on)
+  }
+
+  // ---- Live chat ----------------------------------------------------------
+  addChat(name, text, { self = false, near = true } = {}) {
+    if (!this.el.chatLog) return
+    const el = document.createElement('div')
+    el.className = `cmsg ${self ? 'self' : ''} ${near ? '' : 'far'}`
+    const n = document.createElement('span'); n.className = 'cn'; n.textContent = name
+    el.appendChild(n); el.appendChild(document.createTextNode(text))
+    this.el.chatLog.appendChild(el)
+    setTimeout(() => el.remove(), 9000)
+    while (this.el.chatLog.childElementCount > 6) this.el.chatLog.firstChild.remove()
+  }
+  openChatInput() {
+    if (!this.el.chatInput) return
+    this.el.chatInput.classList.remove('hidden')
+    this.el.chatInput.value = ''
+    this.el.chatInput.focus()
+  }
+  closeChatInput() {
+    if (!this.el.chatInput) return
+    this.el.chatInput.blur()
+    this.el.chatInput.classList.add('hidden')
   }
 
   setWeapon(def, index) {

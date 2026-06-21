@@ -14,6 +14,9 @@ export class Input {
     this.touchMove = { x: 0, y: 0 } // x = strafe, y = forward (-1..1)
 
     this._onKeyDown = (e) => {
+      // Ignore game keys while typing in a text field (chat, name, etc.).
+      const ae = document.activeElement
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return
       this.keys.add(e.code)
       if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault()
     }
