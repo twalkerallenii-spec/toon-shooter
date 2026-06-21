@@ -486,6 +486,7 @@ export class Game {
     localStorage.setItem('ts_stats', JSON.stringify(s))
     // Coins: earn from kills + a win bonus.
     this._setCoins(this._coins() + k * 10 + (won ? 100 : 25))
+    this._populateLobby() // refresh lobby stats immediately (even on Play Again)
   }
 
   // ---- Economy: coins + owned skins (Store/Locker) ----------------------
@@ -964,6 +965,10 @@ export class Game {
     this._streak = (now - this._lastKillT < 4) ? this._streak + 1 : 1
     this._lastKillT = now
     if (this._streak >= 2) this.hud.killStreak(this._streak)
+    // Live kills counter: online shows k/d (handled in _onKilled), co-op shows
+    // score points; every other solo mode shows your kill tally up top.
+    const mode = this.onlineMode || this.soloMode
+    if (!this.net && mode !== 'coop') this.hud.setScore(this.kills || 0)
   }
 
   async _spawnCars() {
