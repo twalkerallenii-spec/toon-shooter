@@ -66,6 +66,9 @@ export class Bot {
     })
   }
 
+  // Combatant interface — same shape as the player (so bots target each other).
+  get position() { return this.group.position }
+
   // Hit by a bullet. Returns true if this killed it. (Enemy-like for Weapons.)
   takeHit(dmg, attacker) {
     if (!this.alive) return false
@@ -161,7 +164,17 @@ export class Bot {
       TMP.subVectors(target.position, p); TMP.y = 0
       const dist = TMP.length(); TMP.normalize()
       this.group.rotation.y = Math.atan2(TMP.x, TMP.z)
-      if (dist > this.shootRange) { p.addScaledVector(TMP, this.speed * dt); moving = true }
+      if (dist > this.shootRange * 0.8) {
+        p.addScaledVector(TMP, this.speed * dt); moving = true // close in
+      } else {
+        // In range: strafe sideways + keep spacing so they never stand still.
+        const side = (Math.floor(this._t || 0) % 2 === 0) ? 1 : -1
+        p.x += TMP.z * side * this.speed * 0.6 * dt
+        p.z += -TMP.x * side * this.speed * 0.6 * dt
+        if (dist < this.shootRange * 0.45) p.addScaledVector(TMP, -this.speed * 0.5 * dt) // back off
+        moving = true
+      }
+      this._t = (this._t || 0) + dt * 0.4
       this.shootCd -= dt
       if (this.shootCd <= 0 && dist < this.shootRange) {
         this.shootCd = this.shootInterval * (0.7 + Math.random() * 0.8)

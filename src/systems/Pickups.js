@@ -49,6 +49,39 @@ export class Pickups {
     })
   }
 
+  // A floating weapon pickup (Battle Royale loot). def = { index, model, key }.
+  spawnWeapon(def, x, z) {
+    const group = new THREE.Group()
+    group.position.set(x, 0, z)
+    this.world.scene.add(group)
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.8, 0.07, 8, 24),
+      new THREE.MeshStandardMaterial({ color: 0x9ad0ff, emissive: 0x2a6cff, emissiveIntensity: 1 })
+    )
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.1
+    group.add(ring)
+    const item = { group, type: 'weapon', wIndex: def.index, x, z, t: Math.random() * 6, ring }
+    this.items.push(item)
+    this.assets.loadModel(`models/guns/${def.model}.gltf`).then((m) => {
+      if (!m) return
+      m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
+      const box = new THREE.Box3().setFromObject(m.scene); const sz = new THREE.Vector3(); box.getSize(sz)
+      m.scene.scale.setScalar(1.8 / (Math.max(sz.x, sz.y, sz.z) || 1))
+      const spin = new THREE.Group(); spin.add(m.scene); spin.position.y = 1.1; group.add(spin)
+      item.spin = spin
+    })
+  }
+
+  // Scatter weapon loot across the map (Battle Royale).
+  scatterWeapons(defs, count, half) {
+    const pickable = defs.map((d, i) => ({ index: i, model: d.model, key: d.key })).filter((d) => d.key !== 'Zip')
+    for (let i = 0; i < count; i++) {
+      const d = pickable[Math.floor(Math.random() * pickable.length)]
+      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * (half - 12)
+      this.spawnWeapon(d, Math.cos(a) * r, Math.sin(a) * r)
+    }
+  }
+
   // Roll for a drop at a kill location.
   rollDrop(x, z) {
     const r = Math.random()
@@ -65,12 +98,15 @@ export class Pickups {
       it.ring.rotation.z += dt * 1.2
 
       const d = Math.hypot(player.position.x - it.x, player.position.z - it.z)
-      if (d < 1.4 && player.alive) {
+      if (d < 1.6 && player.alive) {
         let took = false
         if (it.type === 'health' && player.hp < player.maxHp) {
           player.hp = Math.min(player.maxHp, player.hp + 35); took = true
         } else if (it.type === 'ammo') {
           weapons.ammoByWeapon = weapons.defs.map((wd) => wd.mag); took = true
+        } else if (it.type === 'weapon') {
+          weapons.ammoByWeapon[it.wIndex] = weapons.defs[it.wIndex].mag
+          weapons.switchTo(it.wIndex); took = true
         }
         if (took) {
           this.audio?.pickup()

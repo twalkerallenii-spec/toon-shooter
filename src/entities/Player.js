@@ -1,8 +1,11 @@
 import * as THREE from 'three'
+import { CharacterAnimator, normalizeModel } from './CharacterAnimator.js'
 
 const TMP = new THREE.Vector3()
+const TMP2 = new THREE.Vector3()
 const FORWARD = new THREE.Vector3()
 const RIGHT = new THREE.Vector3()
+const EUL = new THREE.Euler(0, 0, 0, 'YXZ')
 
 // First-person player: eye-level camera with mouse look, a gun viewmodel mounted
 // to the camera (with bob + recoil), gravity/jump, and movement relative to where
@@ -123,8 +126,20 @@ export class Player {
     this.camera.add(this.gun)
   }
 
-  // No body model in FPS; kept for API compatibility (ignored).
-  setModel() {}
+  setModel() {} // kept for API compatibility
+
+  setThirdPerson(on) { this.thirdPerson = on }
+
+  // Load a body model (shown only in third-person).
+  setBody(scene, clips) {
+    if (this.body) { this.modelPivot.remove(this.body) }
+    scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false } })
+    normalizeModel(scene, 1.8)
+    this.modelPivot.add(scene)
+    this.body = scene
+    this.body.visible = !!this.thirdPerson
+    if (clips && clips.length) { this.bodyAnimator = new CharacterAnimator(scene, clips); this.bodyAnimator.play('Idle', { fade: 0 }) }
+  }
 
   getMuzzleWorldPosition(out) {
     return this.muzzle.getWorldPosition(out)
@@ -180,6 +195,15 @@ export class Player {
       this.muzzleFlash.rotation.z = Math.random() * Math.PI
     } else if (this.muzzleFlash) {
       this.muzzleFlash.visible = false
+    }
+
+    // Third-person body: show it, hide the viewmodel, face the look dir, animate.
+    if (this.body) this.body.visible = !!this.thirdPerson
+    if (this.gun) this.gun.visible = !this.thirdPerson
+    if (this.thirdPerson && this.bodyAnimator) {
+      this.modelPivot.rotation.y = this.yaw
+      this.bodyAnimator.play(this.alive ? (this.moving ? 'Run' : 'Idle') : 'Death', { fade: 0.18 })
+      this.bodyAnimator.update(dt)
     }
 
     this._updateCamera(dt)
@@ -385,6 +409,16 @@ export class Player {
   }
 
   _updateCamera(dt) {
+    // Third-person: chase camera behind the player, looking forward.
+    if (this.thirdPerson) {
+      EUL.set(this.pitch + this.recoil, this.yaw, 0)
+      const fwd = TMP.set(0, 0, -1).applyEuler(EUL)
+      const eyeX = this.position.x, eyeY = this.position.y + this.eyeHeight, eyeZ = this.position.z
+      this.camera.position.set(eyeX - fwd.x * 6, eyeY + 1.6 - fwd.y * 6, eyeZ - fwd.z * 6)
+      this.camera.lookAt(eyeX + fwd.x * 12, eyeY + fwd.y * 12, eyeZ + fwd.z * 12)
+      return
+    }
+
     // Eye position with a subtle vertical bob while moving on the ground.
     if (this.moving && this.onGround) this.bobT += dt * (this.sprinting ? 14 : 10)
     const bob = (this.moving && this.onGround) ? Math.sin(this.bobT) * 0.05 : 0

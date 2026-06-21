@@ -25,11 +25,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // Solo combat modes (vs bots) on the normal arena. Each is a small rule tweak.
 const SOLO_MODES = {
-  ffa: { label: 'FFA DEATHMATCH', bots: 7, role: 'fighter', killTarget: 15 },
-  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, startWeapon: 0 },
-  oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0 },
-  jugg: { label: 'JUGGERNAUT', jugg: true },
-  infect: { label: 'INFECTION', bots: 10, role: 'zombie', survive: 90 },
+  ffa: { label: 'FFA DEATHMATCH', bots: 7, role: 'fighter', killTarget: 15, map: 'outpost' },
+  gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, startWeapon: 0, map: 'rooftops' },
+  oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0, map: 'arena' },
+  jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
+  infect: { label: 'INFECTION', bots: 10, role: 'zombie', survive: 90, map: 'rooftops' },
 }
 
 export class Game {
@@ -86,8 +86,14 @@ export class Game {
   _wireUI() {
     this.hud.el.startBtn.addEventListener('click', () => {
       if (this.state === STATE.MENU || this.state === STATE.DEAD) this._startSelectedMode()
-      else if (this.state === STATE.PAUSED) this.resume()
     })
+
+    // Pause / death box buttons.
+    this.hud.el.pauseResume.addEventListener('click', () => {
+      if (this.state === STATE.PAUSED) this.resume()
+      else if (this.state === STATE.DEAD) { this.hud.hidePause(); this._startSelectedMode() }
+    })
+    document.getElementById('pause-quit').addEventListener('click', () => { this.hud.hidePause(); this._toLobby() })
 
     // Multiplayer: server URL precedence = ?server= > saved > empty.
     // Remembered in localStorage so you don't retype your Render URL.
@@ -154,19 +160,23 @@ export class Game {
       })
     })
 
-    // Settings (sensitivity + invert-Y), persisted to localStorage.
+    // Settings (sensitivity + invert-Y + third-person), persisted to localStorage.
     const sens = document.getElementById('set-sens')
     const invert = document.getElementById('set-invert')
+    const tps = document.getElementById('set-tps')
     sens.value = this.settings.sens
     invert.checked = this.settings.invertY
+    tps.checked = !!this.settings.thirdPerson
     const saveSettings = () => {
       this.settings.sens = parseFloat(sens.value)
       this.settings.invertY = invert.checked
+      this.settings.thirdPerson = tps.checked
       localStorage.setItem('ts_settings', JSON.stringify(this.settings))
       this._applySettings()
     }
     sens.addEventListener('input', saveSettings)
     invert.addEventListener('change', saveSettings)
+    tps.addEventListener('change', saveSettings)
 
     this.input.onLockChange = (locked) => {
       // Losing the pointer lock mid-game = pause (desktop only).
@@ -300,6 +310,7 @@ export class Game {
     this.state = STATE.MENU
     this.hud.hide()
     this.hud.hideVictory()
+    this.hud.hidePause()
     this.hud.el.overlay.classList.remove('hidden')
     this.hud.el.startBtn.textContent = 'START MATCH'
     this._lobbyClock.getDelta() // reset dt
@@ -426,6 +437,9 @@ export class Game {
     this.hud.setLoading('DEPLOYING VEHICLES…', 82)
     await this._spawnCars()
 
+    // Battle Royale: scatter weapon loot around the map.
+    if (this.brMode) this.pickups.scatterWeapons(this.weapons.defs, 20, this.world.arenaRadius)
+
     // CPU players per mode.
     if (this.brMode && !this.net) await this._spawnBots(12, 'fighter')
     else if (this.hnsMode && !this.net) await this._spawnBots(8, 'hider')
@@ -492,6 +506,33 @@ export class Game {
       this._carLoads.push(loaded.then((scene) => { if (scene) car.setModel(scene) }))
     }
     await Promise.all(this._carLoads) // models ready before the match starts
+  }
+
+  // Quick melee: short-range strike in front of you.
+  _melee() {
+    this._meleeCd = 0.5
+    this.player.recoil = Math.min(0.22, (this.player.recoil || 0) + 0.16) // viewmodel kick
+    this.audio?.hit?.()
+    const aim = this.player.getAimRay()
+    this._meleeRay = this._meleeRay || new THREE.Raycaster()
+    this._meleeRay.set(aim.origin, aim.dir); this._meleeRay.far = 4
+    const targets = [...this.spawner.enemies, ...this.bots]
+    const remotes = this.net ? [...this.remotePlayers.values()] : []
+    const meshes = []
+    for (const t of targets) if (t.alive && t.hitMesh) meshes.push(t.hitMesh)
+    for (const r of remotes) if (r.hitMesh) meshes.push(r.hitMesh)
+    const hits = this._meleeRay.intersectObjects(meshes, true)
+    if (!hits.length) return
+    const obj = hits[0].object
+    const enemy = targets.find((t) => t.hitMesh === obj)
+    this.particles.emit(hits[0].point, 6, { color: [1, 0.9, 0.5], speed: 4, size: 0.5, life: 0.25 })
+    if (enemy) {
+      const killed = enemy.takeHit(60)
+      if (killed) { this.hud.hitMarker(true); this.audio.kill() } else this.hud.hitMarker(false)
+    } else {
+      const rp = obj.userData?.remote
+      if (rp && this.net && this._relationTo(rp.team) !== 'ally') { this.net.sendHit(rp.id, 60); this.hud.hitMarker(false) }
+    }
   }
 
   // Grapple: zip to wherever you're aiming (props, ground).
@@ -583,6 +624,7 @@ export class Game {
     this.soloMode = mode
     this.brMode = mode === 'br'
     this.hnsMode = mode === 'hns' // Hide & Seek: you're the seeker vs bot hiders
+    if (SOLO_MODES[mode]?.map) this.selectedMap = SOLO_MODES[mode].map // each mode its own world
     this._disconnect() // solo play: drop any prior connection
     this.hud.showVoteToggle(false)
     this.state = STATE.LOADING
@@ -591,14 +633,25 @@ export class Game {
     this.hud.showLoading()
     this._resetGameObjects() // sets this._ready
     await this._ready        // wait for world + assets, with the loading screen up
-    this.hud.loadingReady()  // "WORLD FOUND AND LOADED"
-    await wait(750)
-    this.hud.hideLoading()
+    await this._dropIn()     // "WORLD FOUND" -> click to drop in (locks the mouse)
     this.state = STATE.PLAYING
     this.hud.show()
-    if (!this.input.isTouch) this.input.requestLock()
     this.clock.getDelta() // reset dt
     this._loop()
+  }
+
+  // Show "WORLD FOUND AND LOADED" then wait for a click to drop in. The click is
+  // a real user gesture, so pointer lock (and therefore shooting/aiming) works.
+  async _dropIn() {
+    this.hud.loadingReady()
+    if (this.input.isTouch) { await wait(700); this.hud.hideLoading(); return }
+    this.hud.setLoading('▶ CLICK TO DROP IN')
+    await new Promise((res) => {
+      const onClick = () => { this.hud.el.loading.removeEventListener('click', onClick); res() }
+      this.hud.el.loading.addEventListener('click', onClick)
+    })
+    this.input.requestLock() // within the click's user-activation window
+    this.hud.hideLoading()
   }
 
   // Connect to the relay server, then start once joined.
@@ -641,15 +694,12 @@ export class Game {
           }
           this.hud.setLoading('LOADING WORLD…', 70)
           await this._ready
-          this.hud.loadingReady()
-          await wait(600)
-          this.hud.hideLoading()
+          await this._dropIn()
           this.state = STATE.PLAYING
           this.hud.hideOverlay()
           this.hud.show()
           this.hud.showVoteToggle(true)
           if (this.ctfMode) { this._needBaseSpawn = true; this.hud.setTeamScores(0, 0, true) }
-          if (!this.input.isTouch) this.input.requestLock()
           this.clock.getDelta()
           this._loop()
         },
@@ -724,7 +774,7 @@ export class Game {
     if (this.brMode) {
       this.state = STATE.DEAD
       if (!this.input.isTouch) this.input.exitLock()
-      this.hud.showOverlay(`Eliminated. Kills: ${this.kills}.`, 'PLAY AGAIN')
+      this.hud.showPause('ELIMINATED', `Kills: ${this.kills}.`, 'PLAY AGAIN')
       return
     }
     setTimeout(() => this._respawn(), 1800)
@@ -860,13 +910,13 @@ export class Game {
   pause() {
     if (this.state !== STATE.PLAYING) return
     this.state = STATE.PAUSED
-    this.hud.showOverlay('Paused — click Resume to keep fighting.', 'RESUME')
+    this.hud.showPause('PAUSED', 'Click to lock the mouse and keep fighting.', 'RESUME')
   }
 
   resume() {
     if (this.state !== STATE.PAUSED) return
     this.state = STATE.PLAYING
-    this.hud.hideOverlay()
+    this.hud.hidePause()
     if (!this.input.isTouch) this.input.requestLock()
     this.clock.getDelta()
     this._loop()
@@ -875,10 +925,7 @@ export class Game {
   gameOver() {
     this.state = STATE.DEAD
     this.input.exitLock()
-    this.hud.showOverlay(
-      `You fell on wave ${this.spawner.wave}. Final score: ${this.score}.`,
-      'PLAY AGAIN'
-    )
+    this.hud.showPause('YOU FELL', `Wave ${this.spawner.wave}. Score: ${this.score}.`, 'PLAY AGAIN')
   }
 
   _loop() {
@@ -897,6 +944,12 @@ export class Game {
     const fDown = this.input.isDown('KeyF')
     if (fDown && !this._fPrev && this.player.alive && !this.driving) this._fireGrapple()
     this._fPrev = fDown
+
+    // Melee with V (quick short-range hit).
+    this._meleeCd = Math.max(0, (this._meleeCd || 0) - dt)
+    const vDown = this.input.isDown('KeyV')
+    if (vDown && !this._vPrev && this.player.alive && !this.driving && this._meleeCd <= 0) this._melee()
+    this._vPrev = vDown
 
     // Weapon switching: number keys + mouse wheel.
     for (let i = 0; i < this.weapons.defs.length; i++) {
@@ -929,6 +982,7 @@ export class Game {
       const res = this.weapons.tryFire(this.player.getAimRay(), targets, muzzle, ads, remotes)
       if (res.fired) {
         firedThisFrame = true
+        if (res.tool === 'grapple') { this._fireGrapple() }
         if (res.killed) { this.hud.hitMarker(true); this.audio.kill() }
         else if (res.hit) { this.hud.hitMarker(false); this.audio.hit() }
         if (res.playerHit != null && this.net) {
@@ -1137,6 +1191,13 @@ export class Game {
     if (!this.player) return
     this.player.mouseSensitivity = 0.0022 * this.settings.sens
     this.player.invertY = this.settings.invertY
+    this.player.setThirdPerson(!!this.settings.thirdPerson)
+    // Lazily load the player body model when third-person is first enabled.
+    if (this.settings.thirdPerson && !this.player.body) {
+      this.assets.loadModel(`models/characters/${this.character}.gltf`).then((m) => {
+        if (m && this.player) this.player.setBody(m.scene, m.animations)
+      })
+    }
   }
 
   // Top-down radar: player (heading), enemies, remote players, pickups.

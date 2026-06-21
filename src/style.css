@@ -237,6 +237,21 @@ body.touch #mobile-controls { display: block; }
 }
 body.touch #rank-btn { display: block; }
 
+/* ---- Pause / death box ---- */
+#pausebox {
+  position: fixed; inset: 0; z-index: 28;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 8, 16, 0.7);
+}
+.pausebox-inner {
+  text-align: center; width: min(360px, 84vw);
+  background: rgba(12, 16, 32, 0.92); border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 16px; padding: 28px 26px;
+}
+.pausebox-inner h2 { font-size: 30px; letter-spacing: 3px; color: var(--accent); margin-bottom: 6px; }
+.pausebox-inner p { opacity: 0.8; margin-bottom: 20px; font-size: 14px; }
+.pausebox-inner .big-btn { margin-bottom: 10px; }
+
 /* ---- Victory / defeat screen ---- */
 #victory {
   position: fixed; inset: 0; z-index: 30;

@@ -8,6 +8,7 @@ export const WEAPONS = [
   { key: 'Shotgun', model: 'Shotgun', damage: 13, fireRate: 1.4, mag: 6, spread: 0.085, pellets: 10, auto: false, range: 140, reload: 0.9, adsFov: 60, recoil: 0.12 },
   { key: 'Sniper',  model: 'Sniper',  damage: 130, fireRate: 1.1, mag: 5, spread: 0.002, pellets: 1, auto: false, range: 500, reload: 1.8, adsFov: 22, recoil: 0.16 },
   { key: 'GL',      model: 'GrenadeLauncher', label: 'Grenade Launcher', damage: 0, fireRate: 1.0, mag: 4, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.0, adsFov: 62, recoil: 0.18, projectile: 'grenade' },
+  { key: 'Zip',     model: 'Pistol', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
 ]
 
 // Hitscan shooting for a roster of weapons + lightweight combat FX (tracers,
@@ -67,6 +68,13 @@ export class Weapons {
     if (this.ammo <= 0) { this.startReload(); return NONE }
 
     const def = this.def
+
+    // Tool weapons (grapple) don't shoot bullets — the Game handles the action.
+    if (def.tool) {
+      this._cooldown = 1 / def.fireRate
+      return { fired: true, hit: false, killed: false, barrel: null, playerHit: null, tool: def.tool }
+    }
+
     this.ammo -= 1
     this._cooldown = 1 / def.fireRate
     this.onFire?.()

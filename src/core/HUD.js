@@ -35,6 +35,10 @@ export class HUD {
       loading: document.getElementById('loading'),
       loadFill: document.getElementById('load-fill'),
       loadStatus: document.getElementById('load-status'),
+      pausebox: document.getElementById('pausebox'),
+      pauseTitle: document.getElementById('pause-title'),
+      pauseMsg: document.getElementById('pause-msg'),
+      pauseResume: document.getElementById('pause-resume'),
     }
   }
 
@@ -190,6 +194,14 @@ export class HUD {
     this.el.loadStatus.textContent = 'WORLD FOUND AND LOADED'
   }
   hideLoading() { this.el.loading.classList.add('hidden') }
+
+  showPause(title, msg, btn = 'RESUME') {
+    this.el.pauseTitle.textContent = title
+    this.el.pauseMsg.textContent = msg || ''
+    this.el.pauseResume.textContent = btn
+    this.el.pausebox.classList.remove('hidden')
+  }
+  hidePause() { this.el.pausebox.classList.add('hidden') }
 }
 
 function escapeHtml(s) {

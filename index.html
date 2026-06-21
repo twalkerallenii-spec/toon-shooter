@@ -127,13 +127,16 @@
             <label class="set-row set-check">
               <input id="set-invert" type="checkbox" /> Invert look (Y)
             </label>
+            <label class="set-row set-check">
+              <input id="set-tps" type="checkbox" /> Third-person camera
+            </label>
           </div>
           <ul class="controls">
             <li><b>WASD</b> move</li><li><b>Mouse</b> aim</li>
             <li><b>L-Click</b> shoot</li><li><b>R-Click</b> ADS</li>
             <li><b>Shift</b> sprint</li><li><b>Space</b> jump</li>
             <li><b>1-6/Scroll</b> weapons</li><li><b>G</b> grenade</li>
-            <li><b>E</b> car</li><li><b>F</b> grapple</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
+            <li><b>E</b> car</li><li><b>F</b> grapple</li><li><b>V</b> melee</li><li><b>R</b> reload</li><li><b>Esc</b> pause</li>
           </ul>
         </details>
       </div>
@@ -196,6 +199,16 @@
         <div class="logo">TOON&nbsp;SHOOTER</div>
         <div class="load-bar"><div id="load-fill"></div></div>
         <div id="load-status">SEARCHING FOR WORLD…</div>
+      </div>
+    </div>
+
+    <!-- Pause / death box -->
+    <div id="pausebox" class="hidden">
+      <div class="pausebox-inner">
+        <h2 id="pause-title">PAUSED</h2>
+        <p id="pause-msg"></p>
+        <button id="pause-resume" class="big-btn">RESUME</button>
+        <button id="pause-quit" class="alt-btn">QUIT TO LOBBY</button>
       </div>
     </div>
 

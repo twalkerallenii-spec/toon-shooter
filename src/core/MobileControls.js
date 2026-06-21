@@ -20,6 +20,7 @@ export class MobileControls {
         <button class="m-btn m-small" data-act="sprint">⏵⏵</button>
         <button class="m-btn m-small" data-act="car">🚗</button>
         <button class="m-btn m-small" data-act="grapple">🪝</button>
+        <button class="m-btn m-small" data-act="melee">🔪</button>
         <button class="m-btn" data-act="ads">AIM</button>
         <button class="m-btn m-fire" data-act="fire">FIRE</button>
         <button class="m-btn m-jump" data-act="jump">JUMP</button>
@@ -102,6 +103,7 @@ export class MobileControls {
         case 'sprint': down ? k.add('ShiftLeft') : k.delete('ShiftLeft'); break
         case 'car': down ? k.add('KeyE') : k.delete('KeyE'); break
         case 'grapple': down ? k.add('KeyF') : k.delete('KeyF'); break
+        case 'melee': down ? k.add('KeyV') : k.delete('KeyV'); break
         case 'swap': if (down) this.input._wheel += 1; break
       }
     }
