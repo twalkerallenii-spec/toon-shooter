@@ -153,12 +153,15 @@ wss.on('connection', (ws) => {
       const id = ws.id || nextId++
       const roomName = (msg.room || 'lobby').slice(0, 24)
       const room = getRoom(roomName)
-      const name = (msg.name || `Player${id}`).slice(0, 16)
+      let name = (msg.name || `Player${id}`).slice(0, 16)
       // Banned from this room? Refuse the join.
       if (room._bans && room._bans.has(name.toLowerCase())) {
         send(ws, { t: 'kicked', reason: 'banned' })
         return
       }
+      // No duplicate names in a room — append #n if the name is already taken.
+      const taken = (n) => { for (const [, peer] of room) if (peer.name && peer.name.toLowerCase() === n.toLowerCase()) return true; return false }
+      if (taken(name)) { const base = name.slice(0, 13); let k = 2; while (taken(`${base}#${k}`)) k++; name = `${base}#${k}` }
       ws.id = id
       ws.room = roomName
       // First player in the room is the host (can /ban + /kick).
@@ -184,7 +187,7 @@ wss.on('connection', (ws) => {
       for (const [pid, peer] of room) {
         if (pid !== id) peers.push({ id: pid, name: peer.name, p: peer.state, team: peer.team })
       }
-      send(ws, { t: 'welcome', id, team, peers, ctf: room.ctf || null, admin: room._adminId === id })
+      send(ws, { t: 'welcome', id, team, name, peers, ctf: room.ctf || null, admin: room._adminId === id })
       broadcast(room, { t: 'peerJoin', id, name, team }, id)
       // Update global presence (now in a match).
       presence.set(id, { name, mode: ws.mode, room: roomName, inMatch: true })

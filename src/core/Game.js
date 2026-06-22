@@ -257,6 +257,16 @@ export class Game {
       if (this.state === STATE.MENU || this.state === STATE.DEAD) this.startOnline('br')
     })
 
+    // Join Main Room: everyone (incl. Tristan II) converges in one shared "main"
+    // room for the selected mode.
+    document.getElementById('join-main-btn')?.addEventListener('click', () => {
+      if (this.state === STATE.PLAYING) return
+      if (this._promptPermanentName()) return
+      const roomEl = document.getElementById('mp-room'); if (roomEl) roomEl.value = 'main'
+      const mode = document.querySelector('.event-tile.active')?.dataset.mode || document.querySelector('.mode-btn.active')?.dataset.mode || 'coop'
+      this.startOnline(mode)
+    })
+
     // Invite links: copy a ?room=&mode= URL that drops a friend into your match.
     document.getElementById('invite-btn')?.addEventListener('click', () => {
       const room = (document.getElementById('mp-room').value || 'lobby').trim()
@@ -3234,7 +3244,8 @@ export class Game {
     for (const it of this.pickups.items) dot(it.x, it.z, it.type === 'health' ? '#4ade80' : it.type === 'shield' ? '#3da9fc' : it.type === 'weapon' ? '#9ad0ff' : '#ffcb3d', 2.5)
     for (const e of this.spawner.enemies) if (e.alive) dot(e.group.position.x, e.group.position.z, '#ff5555')
     for (const b of this.bots) if (b.alive) dot(b.group.position.x, b.group.position.z, b.role === 'hider' ? '#ffd24a' : '#ff7a3d')
-    if (this.net) for (const rp of this.remotePlayers.values()) dot(rp.group.position.x, rp.group.position.z, '#5ab0ff')
+    // Real (non-CPU) players show as PURPLE dots.
+    if (this.net) for (const rp of this.remotePlayers.values()) dot(rp.group.position.x, rp.group.position.z, '#a05cff', 3.5)
 
     // Player as a heading triangle.
     const px = sx(this.player.position.x), py = sz(this.player.position.z)
