@@ -1,6 +1,8 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js'
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 
 // Loads and caches GLTF/GLB models. The Toon Shooter Game Kit glTF files live in
@@ -17,8 +19,27 @@ export class AssetLoader {
     draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/')
     this.loader.setDRACOLoader(draco)
     this.collada = new ColladaLoader()
+    this.obj = new OBJLoader()
+    this.fbx = new FBXLoader()
     this.cache = new Map() // path -> gltf
     this.daeCache = new Map() // path -> collada result
+    this.meshCache = new Map() // path -> Object3D (obj/fbx)
+  }
+
+  // Load an OBJ or FBX model. Returns { scene, animations } (a fresh clone) to
+  // match loadModel(), or null if missing. Detected by file extension.
+  async loadMesh(path) {
+    try {
+      if (!this.meshCache.has(path)) {
+        const loader = path.toLowerCase().endsWith('.fbx') ? this.fbx : this.obj
+        this.meshCache.set(path, await loader.loadAsync(path))
+      }
+      const root = this.meshCache.get(path)
+      return { scene: root.clone(true), animations: root.animations || [] }
+    } catch (err) {
+      console.warn(`[AssetLoader] Could not load mesh "${path}".`, err.message)
+      return null
+    }
   }
 
   // Load a COLLADA (.dae) model (e.g. the car pack). Returns a fresh clone of the

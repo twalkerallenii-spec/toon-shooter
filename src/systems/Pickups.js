@@ -12,12 +12,16 @@ export class Pickups {
 
   // type: 'health' | 'medkit' | 'ammo' | 'shield' | 'bigshield'
   spawn(type, x, z) {
-    const MODELS = { health: 'Health', medkit: 'Health', shield: 'GasTank', bigshield: 'GasTank', ammo: 'GasCan' }
+    // Custom OBJ/FBX pickup models (sized + tinted at load).
+    const CUSTOM = {
+      health: 'models/pickups/Health.fbx', medkit: 'models/pickups/Health.fbx',
+      shield: 'models/pickups/Shield.fbx', bigshield: 'models/pickups/Shield.fbx',
+      ammo: 'models/pickups/AmmoBox.obj',
+    }
     const COLS = {
       health: [0x4ade80, 0x2a8a4a], medkit: [0xff5a8a, 0x9a2a4a],
       shield: [0x3da9fc, 0x2176c4], bigshield: [0xb06aff, 0x6a2ac4], ammo: [0xffcb3d, 0xb8901f],
     }
-    const model = MODELS[type] || 'GasCan'
     const group = new THREE.Group()
     group.position.set(x, 0, z)
     this.world.scene.add(group)
@@ -35,16 +39,25 @@ export class Pickups {
     const item = { group, type, x, z, t: Math.random() * 6, ring }
     this.items.push(item)
 
-    this.assets.loadModel(`models/env/${model}.gltf`).then((m) => {
+    const path = CUSTOM[type] || 'models/pickups/AmmoBox.obj'
+    this.assets.loadMesh(path).then((m) => {
       if (!m) return
-      m.scene.traverse((o) => { if (o.isMesh) o.castShadow = true })
+      // Tint to the pickup colour (the source files ship without textures) and
+      // make sure everything casts shadow + renders solid.
+      m.scene.traverse((o) => {
+        if (!o.isMesh) return
+        o.castShadow = true
+        o.material = new THREE.MeshStandardMaterial({ color: col, emissive: emi, emissiveIntensity: 0.25, roughness: 0.55, metalness: 0.15 })
+      })
+      // Auto-normalize size (OBJ/FBX come in wildly different units) to ~0.9u and
+      // sit it on the ground, centred over the ring.
       const box = new THREE.Box3().setFromObject(m.scene)
       const size = new THREE.Vector3(); box.getSize(size)
-      const s = 0.7 / (Math.max(size.x, size.y, size.z) || 1)
+      const s = 0.9 / (Math.max(size.x, size.y, size.z) || 1)
       m.scene.scale.setScalar(s)
       const box2 = new THREE.Box3().setFromObject(m.scene)
       const c = new THREE.Vector3(); box2.getCenter(c)
-      m.scene.position.set(-c.x, 0.7 - box2.min.y, -c.z)
+      m.scene.position.set(-c.x, 0.55 - box2.min.y, -c.z)
       const spin = new THREE.Group()
       spin.add(m.scene)
       group.add(spin)
