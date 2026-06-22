@@ -191,9 +191,9 @@ export class LevelBuilder {
     const extras = ['Crate', 'CardboardBoxes_2', 'CardboardBoxes_4', 'Pallet', 'GasTank',
       'GasCan', 'Barrier_Single', 'TrashContainer_Open']
     let ci = 0
-    for (const frac of [0.16, 0.3, 0.45, 0.6, 0.75]) {
+    for (const frac of [0.16, 0.3, 0.45, 0.6, 0.75, 0.88]) {
       const ring = HALF * frac
-      const slots = Math.max(6, Math.round(frac * 18))
+      const slots = Math.max(8, Math.round(frac * 30))
       for (let s = 0; s < slots; s++) {
         const a = (s / slots) * TAU + rng() * 0.4
         const x = Math.cos(a) * ring + (rng() - 0.5) * 6
@@ -210,7 +210,7 @@ export class LevelBuilder {
     }
 
     // ---- Exploding barrels (kept out of center spawn) ------------------
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 34; i++) {
       let x = (rng() - 0.5) * HALF * 1.7, z = (rng() - 0.5) * HALF * 1.7
       const d = Math.hypot(x, z); if (d < 10) { x = (x / d) * 10; z = (z / d) * 10 }
       jobs.push(this.place(rng() < 0.5 ? 'ExplodingBarrel' : 'ExplodingBarrel_Spilled', { x, z, solid: true, radiusMul: 0.9, barrel: true }))
@@ -218,9 +218,10 @@ export class LevelBuilder {
 
     // ---- Trees lining the field ---------------------------------------
     const trees = ['Tree_1', 'Tree_2', 'Tree_3', 'Tree_4']
-    for (let i = 0; i < 44; i++) {
+    const NT = 84
+    for (let i = 0; i < NT; i++) {
       const edge = HALF - 3 - rng() * 8
-      const ang = (i / 44) * TAU + rng() * 0.2
+      const ang = (i / NT) * TAU + rng() * 0.2
       jobs.push(this.place(trees[i % trees.length], { x: Math.cos(ang) * edge, z: Math.sin(ang) * edge, rotY: rng() * TAU, solid: true, radiusMul: 0.35 }))
     }
 
@@ -228,7 +229,7 @@ export class LevelBuilder {
     const deco = ['StreetLight', 'Sign', 'TrafficCone', 'Debris_Tires', 'Debris_Pile',
       'Debris_Papers_1', 'Debris_Papers_2', 'Debris_Papers_3', 'Pipes', 'WoodPlanks',
       'Pallet_Broken', 'BearTrap_Closed', 'Sofa', 'Sofa_Small']
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 190; i++) {
       jobs.push(this.place(deco[i % deco.length], { x: (rng() - 0.5) * HALF * 1.9, z: (rng() - 0.5) * HALF * 1.9, rotY: rng() * TAU }))
     }
 

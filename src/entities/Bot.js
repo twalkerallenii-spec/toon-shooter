@@ -97,6 +97,24 @@ export class Bot {
     if (this.dying) { this.animator?.update(dt); this.removeTimer -= dt; if (this.removeTimer <= 0) { this.dispose(); return true } return false }
     if (!this.alive) return true
 
+    // Boogie bomb: forced to dance (spin in place, no AI/attacks).
+    if (this._boogie > 0) {
+      this._boogie -= dt
+      this.group.rotation.y += dt * 9
+      this.group.position.y = Math.abs(Math.sin(this._boogie * 12)) * 0.4
+      if (this.animator) { this.animator.play('Idle', { fade: 0.15 }); this.animator.update(dt) }
+      if (ctx.camera) this.tag.quaternion.copy(ctx.camera.quaternion)
+      if (this._boogie <= 0) this.group.position.y = 0
+      return false
+    }
+    // Flashbang: stunned, frozen and blinded (no AI/attacks).
+    if (this._stun > 0) {
+      this._stun -= dt
+      if (this.animator) { this.animator.play('Idle', { fade: 0.15 }); this.animator.update(dt) }
+      if (ctx.camera) this.tag.quaternion.copy(ctx.camera.quaternion)
+      return false
+    }
+
     // HIDER role: flee from the seeker, never shoot.
     if (this.role === 'hider') {
       const p2 = this.group.position

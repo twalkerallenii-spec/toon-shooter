@@ -76,6 +76,16 @@ const WEAPON_SHOP = [
   { i: 24, label: 'WORLD ANNIHILATOR', ico: '🌍', price: 10000000 }, // deletes everything
 ]
 
+// Grenade arsenal — cycle with H, throw with G.
+const NADE_TYPES = [
+  { name: 'Frag', fn: '_nadeFrag', fuse: 2.2, impact: true, speed: 22 },
+  { name: 'Sticky Bomb', fn: '_nadeSticky', fuse: 1.2, impact: true, speed: 24 },
+  { name: 'Cluster', fn: '_nadeCluster', fuse: 2.0, impact: true, speed: 20 },
+  { name: 'Smoke', fn: '_nadeSmoke', fuse: 1.4, impact: false, speed: 18 },
+  { name: 'Flashbang', fn: '_nadeFlash', fuse: 1.4, impact: false, speed: 18 },
+  { name: 'Boogie Bomb', fn: '_nadeBoogie', fuse: 1.4, impact: false, speed: 18 },
+]
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas
@@ -355,6 +365,8 @@ export class Game {
         else if (e.code === 'Digit4') this._setBuildPiece('window')
         else if (e.code === 'Escape') this._toggleBuild()
       }
+      // H cycles grenade type (Frag / Sticky / Cluster / Smoke / Flash / Boogie).
+      if (e.code === 'KeyH' && this.state === STATE.PLAYING && !e.repeat) this._cycleGrenade()
     })
 
     // Mobile RANK button (toggle).
@@ -396,7 +408,9 @@ export class Game {
 
   _buildWorld() {
     // BR is a huge arena; Hide & Seek is a smaller, denser map; rest standard.
-    const radius = this.brMode ? 190 : this.hnsMode ? 95 : 75
+    // MAP_SCALE enlarges every map (all sizes derive from arenaRadius).
+    const MAP_SCALE = 2 // ~4x the play area (2x wider each way)
+    const radius = (this.brMode ? 190 : this.hnsMode ? 95 : 75) * MAP_SCALE
     const backdrop = !!this.brMode || !!this.hnsMode
     this.world = new World({ radius, backdrop })
     this.camera.fov = 72 // reset base FOV (ADS may have left it zoomed)
@@ -862,6 +876,7 @@ export class Game {
     this.score = 0
     this.enemyKills = 0
     this._wonBR = false
+    this._brArmed = false // BR last-standing win only arms once bots have spawned
     // Apply combat-mode tweaks.
     if (this.modeCfg?.lowHp) { this.player.maxHp = 1; this.player.hp = 1 }
     // Fortnite-style: spawn with just a pistol + knife and loot the rest.
@@ -2029,8 +2044,11 @@ export class Game {
       for (let i = this.bots.length - 1; i >= 0; i--) {
         if (this.bots[i].update(dt, ctx)) this.bots.splice(i, 1)
       }
-      // BR (no human opponents present): last one standing wins.
-      if (this.brMode && this.remotePlayers.size === 0 && !this._wonBR && this.player.alive && live.length === 0 && this.bots.length === 0) {
+      // BR (no human opponents present): last one standing wins. Only after bots
+      // have actually spawned (`_brArmed`) — otherwise the first frames of a fresh
+      // match (bots still loading) would instantly re-declare victory.
+      if (this.bots.length > 0) this._brArmed = true
+      if (this.brMode && this._brArmed && this.remotePlayers.size === 0 && !this._wonBR && this.player.alive && live.length === 0 && this.bots.length === 0) {
         this._wonBR = true
         this._winMatch('#1 VICTORY ROYALE', `Last one standing. Eliminations: ${this.kills || 0}.`)
       }
@@ -2766,17 +2784,68 @@ export class Game {
     this.particles?.emit({ x: rec.x, y: rec.y + 1.5, z: rec.z }, 18, { color: [0.6, 0.75, 1], speed: 7, spread: 2.5, size: 0.7, life: 0.5, up: 2 })
   }
 
+  // Grenade arsenal — cycle with H, throw with G.
+  _cycleGrenade() {
+    this._nadeType = ((this._nadeType || 0) + 1) % NADE_TYPES.length
+    this.hud.addKillFeed?.(`🧨 ${NADE_TYPES[this._nadeType].name} selected`)
+  }
+
   throwGrenade() {
     if (this._grenadeCd > 0 || !this.player.alive) return
     this._grenadeCd = 1.0
+    const type = NADE_TYPES[this._nadeType || 0]
     const aim = this.player.getAimRay()
     const start = aim.origin.clone().addScaledVector(aim.dir, 0.8)
-    const vel = aim.dir.clone().multiplyScalar(20)
+    const vel = aim.dir.clone().multiplyScalar(type.speed || 20)
     vel.y += 4 // slight lob
     this.grenades.push(new Grenade({
-      world: this.world, assets: this.assets, position: start, velocity: vel, fuse: 3.0, impact: true,
-      onExplode: (p) => this.explodeAt(p, { radius: 7, damage: 110 }),
+      world: this.world, assets: this.assets, position: start, velocity: vel,
+      fuse: type.fuse, impact: !!type.impact,
+      onExplode: (p) => this[type.fn](p),
     }))
+  }
+
+  // ---- Grenade detonation behaviours ----
+  _nadeFrag(p) { this.explodeAt(p, { radius: 7, damage: 110 }) }
+  _nadeSticky(p) { this.explodeAt(p, { radius: 9, damage: 170 }) }
+  _nadeCluster(p) {
+    this.explodeAt(p, { radius: 6, damage: 70 })
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2
+      const v = new THREE.Vector3(Math.cos(a) * 9, 7 + Math.random() * 3, Math.sin(a) * 9)
+      this.grenades.push(new Grenade({
+        world: this.world, assets: this.assets, position: p.clone().add(new THREE.Vector3(0, 0.5, 0)), velocity: v,
+        fuse: 0.7 + Math.random() * 0.5, impact: false, onExplode: (q) => this.explodeAt(q, { radius: 5, damage: 70 }),
+      }))
+    }
+  }
+  _nadeSmoke(p) {
+    this.audio?.explosion?.()
+    const game = this; let t = 0
+    const c = p.clone(); c.y = 0.5
+    this.grenades.push({ update(dt) { t += dt; if (t < 7) { game.particles.emit({ x: c.x + (Math.random() - 0.5) * 5, y: 0.4 + Math.random() * 2.5, z: c.z + (Math.random() - 0.5) * 5 }, 6, { color: [0.7, 0.7, 0.72], speed: 1.2, spread: 2, size: 4.2, life: 1.6, gravity: 0.4, up: 1 }) } return t >= 7 }, dispose() {} })
+  }
+  _nadeFlash(p) {
+    // Blind the player if near & exposed; stun bots in range.
+    const pd = this.player.position.distanceTo(p)
+    if (pd < 26) this._flashScreen(Math.max(0.25, 1 - pd / 26))
+    for (const b of this.bots) { if (b.alive && b.position.distanceTo(p) < 18) b._stun = 3 }
+    this.particles.emit(p, 40, { color: [1, 1, 1], speed: 18, spread: 6, size: 1.4, life: 0.4 })
+    this.audio?.explosion?.()
+  }
+  _nadeBoogie(p) {
+    for (const b of this.bots) { if (b.alive && b.position.distanceTo(p) < 16) b._boogie = 5 }
+    for (let k = 0; k < 30; k++) this.particles.emit({ x: p.x + (Math.random() - 0.5) * 8, y: 0.3 + Math.random() * 2, z: p.z + (Math.random() - 0.5) * 8 }, 2, { color: [Math.random(), Math.random(), Math.random()], speed: 6, spread: 3, size: 1.0, life: 0.8, up: 4 })
+    this.hud.addKillFeed?.('🪩 Boogie bomb — enemies are dancing!')
+    this.audio?.pickup?.()
+  }
+
+  _flashScreen(intensity = 1) {
+    let el = document.getElementById('flashbang')
+    if (!el) { el = document.createElement('div'); el.id = 'flashbang'; document.body.appendChild(el) }
+    el.style.transition = 'none'; el.style.opacity = String(Math.min(1, intensity))
+    void el.offsetWidth
+    el.style.transition = 'opacity 1.6s ease-out'; el.style.opacity = '0'
   }
 
   _applySettings() {

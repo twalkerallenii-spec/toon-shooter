@@ -499,6 +499,7 @@ body.touch #rank-btn { display: block; }
 #name-gate #ng-go:hover { filter: brightness(1.1); }
 #name-gate #ng-err { color: #ff6a6a; font-size: 12px; min-height: 16px; margin-top: 8px; }
 #mp-name.locked { opacity: 0.85; cursor: not-allowed; }
+#flashbang { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 150; }
 .howto { font-size: 12px; line-height: 1.45; color: #cdd6f0; max-height: 230px; overflow-y: auto; padding-right: 6px; }
 .howto p { margin: 0 0 7px; }
 .howto b { color: #8fc4ff; }
