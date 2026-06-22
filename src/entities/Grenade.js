@@ -7,11 +7,13 @@ const STEP = new THREE.Vector3()
 // instant it touches the ground or any solid object; otherwise it bounces and
 // explodes on its fuse. Calls onExplode(position) when it goes off.
 export class Grenade {
-  constructor({ world, assets, position, velocity, onExplode, fuse = 1.6, impact = false }) {
+  constructor({ world, assets, position, velocity, onExplode, fuse = 1.6, impact = false, proximity = 0, targets = null }) {
     this.world = world
     this.onExplode = onExplode
     this.fuse = fuse
     this.impact = impact
+    this.proximity = proximity // detonate when an enemy comes within this distance
+    this.targets = targets     // () => array of {x,z} enemy positions
     this.exploded = false
     this.pos = position.clone()
     this.prev = position.clone()
@@ -79,6 +81,14 @@ export class Grenade {
     this.group.position.copy(this.pos)
     this.group.rotation.x += dt * 6
     this.group.rotation.y += dt * 4
+
+    // Proximity fuse: blow up when an enemy is close (so grenades reliably hit
+    // foes) — but still NOT on walls/ground unless `impact`.
+    if (this.proximity > 0 && this.targets) {
+      for (const t of this.targets()) {
+        if (Math.hypot(t.x - this.pos.x, t.z - this.pos.z) < this.proximity) return this._explode()
+      }
+    }
 
     if (this.fuse <= 0) return this._explode()
     return false

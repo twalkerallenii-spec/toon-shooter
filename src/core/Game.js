@@ -2689,6 +2689,7 @@ export class Game {
     else if (fx.kind === 'spray') this._spawnSpray(new THREE.Vector3(fx.x, fx.y, fx.z), new THREE.Vector3(fx.nx, fx.ny, fx.nz), fx.e)
     else if (fx.kind === 'build') { if (!this._buildsById?.[fx.id]) this._spawnBuild(fx.piece, fx.tx, fx.tz, fx.baseY, fx.yaw, !!fx.down, fx.id) }
     else if (fx.kind === 'buildgone') { const rec = this._buildsById?.[fx.id]; if (rec) this._removeBuild(rec, true) }
+    else if (fx.kind === 'flash') { const d = Math.hypot(this.player.position.x - fx.x, this.player.position.z - fx.z); if (d < (fx.r || 26)) this._flashScreen(Math.max(0.3, 1 - d / (fx.r || 26))) }
   }
 
   _emojiTexture(emoji, px = 128) {
@@ -2936,8 +2937,18 @@ export class Game {
     this.grenades.push(new Grenade({
       world: this.world, assets: this.assets, position: start, velocity: vel,
       fuse: type.fuse, impact: !!type.impact,
+      proximity: 3.0, targets: () => this._nadeTargets(), // detonate near enemies
       onExplode: (p) => this[type.fn](p),
     }))
+  }
+
+  // Positions of everything a grenade should detonate near (bots, wave enemies, remotes).
+  _nadeTargets() {
+    const out = []
+    for (const b of this.bots) if (b.alive) out.push(b.position)
+    for (const e of this.spawner.enemies) if (e.alive) out.push(e.group.position)
+    if (this.net) for (const rp of this.remotePlayers.values()) out.push(rp.group.position)
+    return out
   }
 
   // ---- Grenade detonation behaviours ----
@@ -2962,9 +2973,12 @@ export class Game {
   }
   _nadeFlash(p) {
     // Blind the player if near & exposed; stun bots in range.
+    const R = 26
     const pd = this.player.position.distanceTo(p)
-    if (pd < 26) this._flashScreen(Math.max(0.25, 1 - pd / 26))
+    if (pd < R) this._flashScreen(Math.max(0.25, 1 - pd / R))
     for (const b of this.bots) { if (b.alive && b.position.distanceTo(p) < 18) b._stun = 3 }
+    // White out the screens of other players caught in the blast.
+    this.net?.sendFx({ kind: 'flash', x: p.x, z: p.z, r: R })
     this.particles.emit(p, 40, { color: [1, 1, 1], speed: 18, spread: 6, size: 1.4, life: 0.4 })
     this.audio?.explosion?.()
   }
