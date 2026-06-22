@@ -216,8 +216,8 @@ export class Player {
     // Third-person body: show it, hide the viewmodel, face the look dir, animate.
     if (this.body) this.body.visible = !!this.thirdPerson
     if (this.gun) this.gun.visible = !this.thirdPerson
+    if (this.thirdPerson) this.modelPivot.rotation.y = this.yaw // body faces the crosshair
     if (this.thirdPerson && this.bodyAnimator) {
-      this.modelPivot.rotation.y = this.yaw
       this.bodyAnimator.play(this.alive ? (this.moving ? 'Run' : 'Idle') : 'Death', { fade: 0.18 })
       this.bodyAnimator.update(dt)
     }
@@ -396,6 +396,7 @@ export class Player {
 
     // Horizontal: push out of any box whose body the player overlaps vertically.
     for (const b of this.world.platforms) {
+      if (b.ramp) continue                      // ramps are walk-up slopes, never walls
       const feetY = p.y, headY = p.y + h
       if (headY <= b.bottom + 0.02) continue   // entirely under an elevated platform
       if (feetY >= b.top - step) continue       // on/above top -> don't shove off
@@ -425,6 +426,14 @@ export class Player {
       if (!b.climbable) continue
       if (p.x < b.minX - r || p.x > b.maxX + r) continue
       if (p.z < b.minZ - r || p.z > b.maxZ + r) continue
+      if (b.ramp) {
+        // Walkable slope: support height interpolates along the ramp axis.
+        const a = b.ramp.axis === 'x' ? p.x : p.z
+        const t = Math.max(0, Math.min(1, (a - (b.ramp.axis === 'x' ? b.minX : b.minZ)) / 4))
+        const rampY = b.ramp.yMin + (b.ramp.yMax - b.ramp.yMin) * t
+        if (rampY <= p.y + step && rampY > support) support = rampY
+        continue
+      }
       if (b.top <= p.y + step && b.top > support) support = b.top
     }
     if (p.y <= support) {

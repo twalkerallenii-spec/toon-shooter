@@ -60,6 +60,19 @@ const WEAPON_SHOP = [
   { i: 9, label: 'Grenade Launcher', ico: '🧨', price: 900 },
   { i: 6, label: 'Minigun', ico: '🌀', price: 1200 },
   { i: 10, label: 'Rocket Launcher', ico: '🚀', price: 1500 },
+  { i: 13, label: 'SUPER GUN', ico: '🔵', price: 100000 }, // legendary energy cannon
+  // God-tier weapons — each stronger than the last. Buyable for huge sums, and
+  // the host/admin can grab them all instantly with /arsenal.
+  { i: 14, label: 'Plasma Cannon', ico: '🟢', price: 150000 },
+  { i: 15, label: 'Ion Storm', ico: '🔷', price: 250000 },
+  { i: 16, label: 'Void Ripper', ico: '🟣', price: 400000 },
+  { i: 17, label: 'Nova Blaster', ico: '🌸', price: 600000 },
+  { i: 18, label: 'Singularity Gun', ico: '🟪', price: 900000 },
+  { i: 19, label: 'Antimatter Rifle', ico: '🔴', price: 1300000 },
+  { i: 20, label: 'Quasar Cannon', ico: '🟠', price: 1800000 },
+  { i: 21, label: 'Hyperbeam', ico: '🟦', price: 2500000 },
+  { i: 22, label: 'Apocalypse', ico: '🟥', price: 3500000 },
+  { i: 23, label: 'Omega Annihilator', ico: '⚪', price: 5000000 },
 ]
 
 export class Game {
@@ -338,6 +351,7 @@ export class Game {
         if (e.code === 'Digit1') this._setBuildPiece('wall')
         else if (e.code === 'Digit2') this._setBuildPiece('floor')
         else if (e.code === 'Digit3') this._setBuildPiece('ramp')
+        else if (e.code === 'Digit4') this._setBuildPiece('window')
         else if (e.code === 'Escape') this._toggleBuild()
       }
     })
@@ -661,8 +675,9 @@ export class Game {
     const w = WEAPON_SHOP.find((x) => x.i === i); if (!w) return
     const owned = this._ownedWeapons()
     if (owned.includes(i)) return
-    if (this._coins() < w.price) { this.hud.addKillFeed?.(`Not enough ◆ for ${w.label}`); return }
-    this._setCoins(this._coins() - w.price)
+    const free = !!this.isAdmin // host/admin unlocks weapons for free
+    if (!free && this._coins() < w.price) { this.hud.addKillFeed?.(`Not enough ◆ for ${w.label}`); return }
+    if (!free) this._setCoins(this._coins() - w.price)
     owned.push(i); this._saveOwnedWeapons(owned)
     this.audio?.pickup?.()
     this._renderWeaponStore(); this._populateLobby()
@@ -1179,6 +1194,16 @@ export class Game {
       } else {
         this.hud.addChat('System', 'Start a match first, then /supergun.', { self: true })
       }
+      return
+    }
+    // Admin/host: /arsenal grants the SuperGun + all 10 god-tier weapons at once.
+    if (text.toLowerCase() === '/arsenal') {
+      if (!this.isAdmin && this.net) { this.hud.addChat('System', 'Only the host can use /arsenal.', { self: true }); return }
+      if (this.state !== STATE.PLAYING) { this.hud.addChat('System', 'Start a match first, then /arsenal.', { self: true }); return }
+      const GOD = ['SuperGun', 'Plasma', 'Ion', 'Void', 'Nova', 'Singular', 'Antimat', 'Quasar', 'Hyper', 'Apoc', 'Omega']
+      for (const key of GOD) { const i = this.weapons.defs.findIndex((d) => d.key === key); if (i >= 0) this.weapons.give(i) }
+      this.hud.setOwned(this.weapons.owned)
+      this.hud.addChat('System', '☠ ADMIN ARSENAL granted — all god-tier weapons equipped!', { self: true })
       return
     }
     if (this.net) this.net.sendChat(text)
@@ -1951,6 +1976,7 @@ export class Game {
           }
         }
         if (res.barrel) this.explode(res.barrel)
+        if (res.buildHit) this._damageBuild(res.buildHit, res.dmg || this.weapons.def.damage || 25)
         // Grenade launcher: lobbed explosive shell.
         if (res.projectile === 'grenade') {
           const v = res.dir.clone().multiplyScalar(42); v.y += 2
@@ -2287,6 +2313,14 @@ export class Game {
     const pd = Math.hypot(this.player.position.x - pos.x, this.player.position.z - pos.z)
     if (pd < radius && this.player.alive && !energy) this.player.takeDamage((damage * 0.36) * (1 - pd / radius))
 
+    // Destroy/damage nearby builds.
+    if (this._builds && this._builds.length) {
+      for (const rec of [...this._builds]) {
+        const d = Math.hypot(rec.x - pos.x, rec.z - pos.z)
+        if (d < radius + 1.5) this._damageBuild(rec, damage * (1 - d / (radius + 1.5)))
+      }
+    }
+
     // Chain nearby barrels.
     if (depth < 6) {
       for (const b of this.world.barrels) {
@@ -2302,14 +2336,24 @@ export class Game {
   // everything (walls included) and one-shots anything it passes through, leaving
   // a heavy particle trail. Duck-typed into this.grenades.
   _fireEnergy(origin, dir) {
+    // Tier scales the power: bigger orb, wider one-shot radius, bigger final blast,
+    // faster travel. SuperGun = tier 1; the Armory god-guns are tiers 2..11.
+    const tier = this.weapons.def?.energyTier || 1
+    const col = this.weapons.def?.energyColor || 0x44aaff
+    const r0 = 1.35 * (1 + (tier - 1) * 0.18)
+    const r1 = 2.85 * (1 + (tier - 1) * 0.18)
+    const KILL_R = 4.5 + (tier - 1) * 2.2 // wider one-shot radius at higher tiers
+    const blastR = 14 + (tier - 1) * 5
+    const speed = 80 + (tier - 1) * 6
+    const core = new THREE.Color(col).lerp(new THREE.Color(0xffffff), 0.55)
     const grp = new THREE.Group()
-    grp.add(new THREE.Mesh(new THREE.SphereGeometry(1.35, 18, 18), new THREE.MeshBasicMaterial({ color: 0x9fe0ff })))
-    grp.add(new THREE.Mesh(new THREE.SphereGeometry(2.85, 18, 18), new THREE.MeshBasicMaterial({ color: 0x2a88ff, transparent: true, opacity: 0.3, depthWrite: false })))
-    grp.add(new THREE.PointLight(0x44aaff, 4, 30))
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(r0, 18, 18), new THREE.MeshBasicMaterial({ color: core })))
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(r1, 18, 18), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.3, depthWrite: false })))
+    grp.add(new THREE.PointLight(col, 4 + tier, 30 + tier * 4))
     grp.position.copy(origin)
     this.world.scene.add(grp)
-    const vel = dir.clone().multiplyScalar(80)
-    const KILL_R = 4.5 // wide one-shot radius around the orb
+    const vel = dir.clone().multiplyScalar(speed)
+    const cv = new THREE.Color(col)
     const game = this
     const blast = {
       pos: origin.clone(), life: 3.0, _t: 0, group: grp,
@@ -2318,7 +2362,7 @@ export class Game {
         this._t += dt
         this.pos.addScaledVector(vel, dt); grp.position.copy(this.pos)
         grp.children[0].scale.setScalar(1 + Math.sin(this._t * 30) * 0.12)
-        game.particles.emit(this.pos, 10, { color: [0.35, 0.7, 1], speed: 6, spread: 2.6, size: 3.0, life: 0.4, drag: 4 })
+        game.particles.emit(this.pos, 10 + tier, { color: [cv.r, cv.g, cv.b], speed: 6, spread: 2.6, size: 3.0, life: 0.4, drag: 4 })
         // Pierce + one-shot anything within range each frame (walls don't stop it).
         for (const b of game.bots) {
           if (b.alive && Math.hypot(b.position.x - this.pos.x, b.position.z - this.pos.z) < KILL_R) b.applyDamage?.(1e9, null)
@@ -2333,7 +2377,7 @@ export class Game {
         }
         this.life -= dt
         if (this.life <= 0 || this.pos.y < 0.2) {
-          game.explodeAt(this.pos, { radius: 14, damage: 1e9, energy: true })
+          game.explodeAt(this.pos, { radius: blastR, damage: 1e9, energy: true })
           this.dispose(); return true
         }
         return false
@@ -2430,13 +2474,18 @@ export class Game {
   }
 
   // ---- Build mode (walls / floors / ramps) ----
+  _buildHint() {
+    const p = (this.buildPiece || 'wall').toUpperCase()
+    this.hud.setObjective(`🔨 BUILD: ${p}  ·  [1] Wall  [2] Floor  [3] Ramp  [4] Window  ·  look down = down-ramp  ·  Click to place  ·  B / Esc exit`)
+  }
+
   _toggleBuild() {
     if (this.driving) return
     this.buildMode = !this.buildMode
     if (this.buildMode) {
       this.buildPiece = this.buildPiece || 'wall'
       this._updateBuildGhost()
-      this.hud.setObjective('🔨 BUILD  [1] Wall  [2] Floor  [3] Ramp  ·  Click to place  ·  B / Esc to exit')
+      this._buildHint()
     } else {
       if (this._buildGhost) this._buildGhost.visible = false
       this.hud.setObjective('')
@@ -2445,22 +2494,32 @@ export class Game {
 
   _setBuildPiece(p) {
     this.buildPiece = p
+    this._buildGhostPiece = null // force ghost rebuild
     this._updateBuildGhost()
-    this.hud.setObjective(`🔨 BUILD: ${p.toUpperCase()}  ·  [1] Wall  [2] Floor  [3] Ramp  ·  Click to place  ·  B / Esc to exit`)
+    this._buildHint()
   }
 
-  _makePiece(piece, ghost) {
+  _makePiece(piece, ghost, down = false) {
     const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, metalness: 0.05, transparent: ghost, opacity: ghost ? 0.4 : 1, emissive: ghost ? 0x2a5a8a : 0x000000 })
     let obj
     if (piece === 'wall') {
       obj = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 0.4), mat(0x8fc4ff)); obj.userData.localY = 2
     } else if (piece === 'floor') {
       obj = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 4), mat(0xc9a36a)); obj.userData.localY = -0.2
-    } else { // ramp — a tilted plank you mantle up
+    } else if (piece === 'window') {
+      // A wall with a centred hole you can shoot (and see) through.
+      obj = new THREE.Group(); obj.userData.localY = 0
+      const c = 0x8fc4ff
+      const add = (w, hgt, y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, 0.4), mat(c)); m.position.y = y; obj.add(m) }
+      add(4, 1.2, 0.6)   // sill
+      add(4, 1.2, 3.4)   // header
+      const side = (x) => { const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.4), mat(c)); m.position.set(x, 2, 0); obj.add(m) }
+      side(-1.4); side(1.4) // jambs — leaves a ~1.6×1.6 hole in the middle
+    } else { // ramp — a tilted plank (walkable slope handled by collision)
       obj = new THREE.Group()
       const plank = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 5.66), mat(0xc9a36a))
-      plank.rotation.x = -Math.PI / 4
-      obj.add(plank); obj.userData.localY = 2
+      plank.rotation.x = down ? Math.PI / 4 : -Math.PI / 4
+      obj.add(plank); obj.userData.localY = down ? -2 : 2
     }
     obj.traverse((o) => { if (o.isMesh) { o.castShadow = !ghost; o.receiveShadow = !ghost } })
     return obj
@@ -2469,26 +2528,27 @@ export class Game {
   _buildPlacement() {
     const p = this.player.position
     const baseY = Math.max(0, Math.round(p.y / 4) * 4)
-    // Use the REAL camera look direction (where you're aiming), not raw yaw —
-    // otherwise the piece lands behind you.
+    // Use the REAL camera look direction (where you're aiming), not raw yaw.
     const aim = this.player.getAimRay()
     const fwd = new THREE.Vector3(aim.dir.x, 0, aim.dir.z)
     if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, 1); else fwd.normalize()
     const tx = Math.round((p.x + fwd.x * 4) / 4) * 4
     const tz = Math.round((p.z + fwd.z * 4) / 4) * 4
     const yawSnap = Math.round(Math.atan2(fwd.x, fwd.z) / (Math.PI / 2)) * (Math.PI / 2)
-    return { tx, tz, baseY, yawSnap }
+    const down = this.buildPiece === 'ramp' && aim.dir.y < -0.3 // looking down → down-ramp
+    return { tx, tz, baseY, yawSnap, down }
   }
 
   _updateBuildGhost() {
     if (!this.buildMode) return
-    if (!this._buildGhost || this._buildGhostPiece !== this.buildPiece) {
+    const { tx, tz, baseY, yawSnap, down } = this._buildPlacement()
+    const tag = this.buildPiece + (down ? '-down' : '')
+    if (!this._buildGhost || this._buildGhostPiece !== tag) {
       if (this._buildGhost) this.world.scene.remove(this._buildGhost)
-      this._buildGhost = this._makePiece(this.buildPiece, true)
-      this._buildGhostPiece = this.buildPiece
+      this._buildGhost = this._makePiece(this.buildPiece, true, down)
+      this._buildGhostPiece = tag
       this.world.scene.add(this._buildGhost)
     }
-    const { tx, tz, baseY, yawSnap } = this._buildPlacement()
     const g = this._buildGhost
     g.visible = true
     g.position.set(tx, baseY + g.userData.localY, tz)
@@ -2497,42 +2557,81 @@ export class Game {
 
   _placeBuild() {
     if (!this.buildMode) return
-    const { tx, tz, baseY, yawSnap } = this._buildPlacement()
-    const obj = this._makePiece(this.buildPiece, false)
+    const { tx, tz, baseY, yawSnap, down } = this._buildPlacement()
+    const piece = this.buildPiece
+    const obj = this._makePiece(piece, false, down)
     obj.position.set(tx, baseY + obj.userData.localY, tz)
     obj.rotation.y = yawSnap
     this.world.scene.add(obj)
     this._builds = this._builds || []
     const obstacle = { mesh: obj, radius: 2, x: tx, z: tz }
     this.world.obstacles.push(obstacle)
+    const plats = []
 
-    if (this.buildPiece === 'ramp') {
-      // A ramp must be WALKABLE: model it as 8 stacked 0.5u steps (= the player's
-      // auto-step height) rising along the facing direction. A single flat-top box
-      // would behave like a wall and block you.
+    if (piece === 'ramp') {
+      // Walkable slope: one platform with interpolated support height along the
+      // facing axis (collision in Player._resolvePlatforms handles `ramp`).
       const fwd = new THREE.Vector3(Math.sin(yawSnap), 0, Math.cos(yawSnap))
-      const alongX = Math.abs(fwd.x) > Math.abs(fwd.z)
-      const N = 8
-      for (let i = 0; i < N; i++) {
-        const f = (i + 0.5) / N
-        const off = -2 + f * 4
-        const sx = tx + fwd.x * off, sz = tz + fwd.z * off
-        const top = baseY + f * 4
-        const plat = alongX
-          ? { minX: sx - 0.35, maxX: sx + 0.35, minZ: tz - 2, maxZ: tz + 2, top, bottom: baseY, climbable: true }
-          : { minX: tx - 2, maxX: tx + 2, minZ: sz - 0.35, maxZ: sz + 0.35, top, bottom: baseY, climbable: true }
-        this.world.platforms.push(plat)
-      }
+      const axis = Math.abs(fwd.x) > Math.abs(fwd.z) ? 'x' : 'z'
+      const dir = axis === 'x' ? Math.sign(fwd.x) || 1 : Math.sign(fwd.z) || 1
+      const yLow = down ? baseY - 4 : baseY
+      const yHigh = down ? baseY : baseY + 4
+      const highTowardDir = !down // up-ramp: high end toward facing; down-ramp: low toward facing
+      let yMin, yMax
+      if (highTowardDir) { if (dir > 0) { yMin = yLow; yMax = yHigh } else { yMin = yHigh; yMax = yLow } }
+      else { if (dir > 0) { yMin = yHigh; yMax = yLow } else { yMin = yLow; yMax = yHigh } }
+      const plat = { minX: tx - 2, maxX: tx + 2, minZ: tz - 2, maxZ: tz + 2, top: Math.max(yMin, yMax), bottom: Math.min(yMin, yMax), climbable: true, ramp: { axis, yMin, yMax } }
+      this.world.platforms.push(plat); plats.push(plat)
     } else {
       const wb = new THREE.Box3().setFromObject(obj)
-      this.world.platforms.push({
+      const plat = {
         minX: wb.min.x, maxX: wb.max.x, minZ: wb.min.z, maxZ: wb.max.z,
-        top: wb.max.y, bottom: wb.min.y, climbable: this.buildPiece !== 'wall',
-      })
+        top: wb.max.y, bottom: wb.min.y, climbable: piece === 'floor',
+      }
+      this.world.platforms.push(plat); plats.push(plat)
     }
-    this._builds.push({ obj, obstacle })
+
+    // Destructible: builds have HP and can be shot or blown up.
+    const maxHp = piece === 'floor' ? 150 : piece === 'ramp' ? 120 : 200
+    const rec = { obj, obstacle, plats, hp: maxHp, maxHp, x: tx, y: baseY, z: tz, bar: null }
+    obj.traverse((o) => { if (o.isMesh) o.userData.build = rec }) // bullets find it
+    this._builds.push(rec)
     this.audio?.pickup?.()
     this.particles?.emit({ x: tx, y: baseY + 1, z: tz }, 8, { color: [0.5, 0.8, 1], speed: 3, spread: 2, size: 0.8, life: 0.4, up: 2 })
+  }
+
+  // Damage a placed build; show a health bar; destroy at 0 HP.
+  _damageBuild(rec, dmg) {
+    if (!rec || rec._dead) return
+    rec.hp -= dmg
+    this.particles?.emit({ x: rec.x, y: rec.y + 1.5, z: rec.z }, 5, { color: [0.7, 0.85, 1], speed: 4, spread: 1.5, size: 0.4, life: 0.3 })
+    if (rec.hp <= 0) { this._removeBuild(rec); return }
+    // Health bar billboard above the piece.
+    if (!rec.bar) {
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 10
+      const tex = new THREE.CanvasTexture(cv)
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }))
+      spr.scale.set(2.4, 0.38, 1); spr.position.set(rec.x, rec.y + 4.6, rec.z); spr.renderOrder = 997
+      this.world.scene.add(spr)
+      rec.bar = { spr, cv, tex }
+    }
+    const f = Math.max(0, rec.hp / rec.maxHp)
+    const c = rec.bar.cv.getContext('2d')
+    c.clearRect(0, 0, 64, 10); c.fillStyle = '#000a'; c.fillRect(0, 0, 64, 10)
+    c.fillStyle = f > 0.5 ? '#4ade80' : f > 0.25 ? '#ffcb3d' : '#ff5a5a'; c.fillRect(1, 1, 62 * f, 8)
+    rec.bar.tex.needsUpdate = true
+  }
+
+  _removeBuild(rec) {
+    rec._dead = true
+    this.world.scene.remove(rec.obj)
+    rec.obj.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() })
+    const oi = this.world.obstacles.indexOf(rec.obstacle); if (oi >= 0) this.world.obstacles.splice(oi, 1)
+    for (const pl of rec.plats) { const i = this.world.platforms.indexOf(pl); if (i >= 0) this.world.platforms.splice(i, 1) }
+    if (rec.bar) { this.world.scene.remove(rec.bar.spr); rec.bar.tex.dispose() }
+    const bi = this._builds.indexOf(rec); if (bi >= 0) this._builds.splice(bi, 1)
+    this.audio?.explosion?.()
+    this.particles?.emit({ x: rec.x, y: rec.y + 1.5, z: rec.z }, 18, { color: [0.6, 0.75, 1], speed: 7, spread: 2.5, size: 0.7, life: 0.5, up: 2 })
   }
 
   throwGrenade() {

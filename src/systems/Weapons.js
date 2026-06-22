@@ -15,7 +15,18 @@ export const WEAPONS = [
   { key: 'RPG',     model: 'RocketLauncher', ico: '🚀', rarity: 'legendary', label: 'Rocket Launcher', damage: 0, fireRate: 0.7, mag: 2, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 2.6, adsFov: 62, recoil: 0.24, projectile: 'rocket' },
   { key: 'Knife',   model: 'Knife_1', ico: '🔪', rarity: 'common', label: 'Knife', damage: 75, fireRate: 2.4, mag: 99, spread: 0, pellets: 1, auto: false, range: 4.5, reload: 0.1, adsFov: 70, recoil: 0.06, tracer: 0xffffff, melee: true },
   { key: 'Zip',     model: 'Pistol', ico: '🪝', rarity: 'uncommon', label: 'Grapple', damage: 0, fireRate: 1.6, mag: 99, spread: 0, pellets: 1, auto: false, range: 140, reload: 0.1, adsFov: 70, recoil: 0, tool: 'grapple' },
-  { key: 'SuperGun', model: 'Shotgun', ico: '🔵', rarity: 'legendary', label: 'Super Gun', damage: 0, fireRate: 1.3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 1.6, adsFov: 60, recoil: 0.2, projectile: 'energy', tracer: 0x44aaff, secret: true },
+  { key: 'SuperGun', model: 'Shotgun', ico: '🔵', rarity: 'legendary', label: 'Super Gun', damage: 0, fireRate: 1.3, mag: 6, spread: 0.01, pellets: 1, auto: false, range: 200, reload: 1.6, adsFov: 60, recoil: 0.2, projectile: 'energy', energyTier: 1, energyColor: 0x44aaff, tracer: 0x44aaff, secret: true },
+  // ---- God-tier Armory weapons (indices 14-23): each stronger than the SuperGun.
+  { key: 'Plasma',   model: 'Shotgun', ico: '🟢', rarity: 'legendary', label: 'Plasma Cannon',      damage: 0, fireRate: 1.6, mag: 8,  spread: 0.01, pellets: 1, auto: false, range: 300, reload: 1.4, adsFov: 60, recoil: 0.18, projectile: 'energy', energyTier: 2,  energyColor: 0x66ffcc, tracer: 0x66ffcc, secret: true },
+  { key: 'Ion',      model: 'Shotgun', ico: '🔷', rarity: 'legendary', label: 'Ion Storm',          damage: 0, fireRate: 2.0, mag: 10, spread: 0.01, pellets: 1, auto: false, range: 320, reload: 1.4, adsFov: 60, recoil: 0.16, projectile: 'energy', energyTier: 3,  energyColor: 0x66ccff, tracer: 0x66ccff, secret: true },
+  { key: 'Void',     model: 'Shotgun', ico: '🟣', rarity: 'legendary', label: 'Void Ripper',        damage: 0, fireRate: 2.6, mag: 12, spread: 0.01, pellets: 1, auto: true,  range: 340, reload: 1.3, adsFov: 60, recoil: 0.15, projectile: 'energy', energyTier: 4,  energyColor: 0xaa66ff, tracer: 0xaa66ff, secret: true },
+  { key: 'Nova',     model: 'Shotgun', ico: '🌸', rarity: 'legendary', label: 'Nova Blaster',       damage: 0, fireRate: 3.2, mag: 16, spread: 0.01, pellets: 1, auto: true,  range: 360, reload: 1.3, adsFov: 60, recoil: 0.14, projectile: 'energy', energyTier: 5,  energyColor: 0xff66aa, tracer: 0xff66aa, secret: true },
+  { key: 'Singular', model: 'Shotgun', ico: '🟪', rarity: 'legendary', label: 'Singularity Gun',    damage: 0, fireRate: 4.0, mag: 20, spread: 0.01, pellets: 1, auto: true,  range: 380, reload: 1.2, adsFov: 60, recoil: 0.12, projectile: 'energy', energyTier: 6,  energyColor: 0x9966ff, tracer: 0x9966ff, secret: true },
+  { key: 'Antimat',  model: 'Shotgun', ico: '🔴', rarity: 'legendary', label: 'Antimatter Rifle',   damage: 0, fireRate: 5.0, mag: 24, spread: 0.01, pellets: 1, auto: true,  range: 400, reload: 1.2, adsFov: 60, recoil: 0.11, projectile: 'energy', energyTier: 7,  energyColor: 0xff4444, tracer: 0xff4444, secret: true },
+  { key: 'Quasar',   model: 'Shotgun', ico: '🟠', rarity: 'legendary', label: 'Quasar Cannon',      damage: 0, fireRate: 6.0, mag: 30, spread: 0.01, pellets: 1, auto: true,  range: 420, reload: 1.1, adsFov: 60, recoil: 0.10, projectile: 'energy', energyTier: 8,  energyColor: 0xffaa33, tracer: 0xffaa33, secret: true },
+  { key: 'Hyper',    model: 'Shotgun', ico: '🟦', rarity: 'legendary', label: 'Hyperbeam',          damage: 0, fireRate: 7.5, mag: 40, spread: 0.01, pellets: 1, auto: true,  range: 450, reload: 1.0, adsFov: 60, recoil: 0.09, projectile: 'energy', energyTier: 9,  energyColor: 0x33ffff, tracer: 0x33ffff, secret: true },
+  { key: 'Apoc',     model: 'Shotgun', ico: '🟥', rarity: 'legendary', label: 'Apocalypse',         damage: 0, fireRate: 9.0, mag: 50, spread: 0.01, pellets: 1, auto: true,  range: 480, reload: 1.0, adsFov: 60, recoil: 0.08, projectile: 'energy', energyTier: 10, energyColor: 0xff2200, tracer: 0xff2200, secret: true },
+  { key: 'Omega',    model: 'Shotgun', ico: '⚪', rarity: 'legendary', label: 'Omega Annihilator',   damage: 0, fireRate: 12,  mag: 80, spread: 0.01, pellets: 1, auto: true,  range: 500, reload: 0.9, adsFov: 60, recoil: 0.06, projectile: 'energy', energyTier: 11, energyColor: 0xffffff, tracer: 0xffffff, secret: true },
 ]
 
 // Hitscan shooting for a roster of weapons + lightweight combat FX (tracers,
@@ -132,7 +143,7 @@ export class Weapons {
 
     const start = muzzlePos ? muzzlePos.clone() : aim.origin.clone().addScaledVector(aim.dir, 1.2)
     const spread = def.spread * (ads ? 0.3 : 1)
-    let hitEnemy = false, killed = false, barrel = null, playerHit = null, headshot = false, dmgDealt = 0, hitPos = null
+    let hitEnemy = false, killed = false, barrel = null, playerHit = null, headshot = false, dmgDealt = 0, hitPos = null, buildHit = null
 
     for (let p = 0; p < def.pellets; p++) {
       const dir = aim.dir.clone()
@@ -169,6 +180,8 @@ export class Weapons {
           const b = findBarrel(hit.object)
           if (b) barrel = b
           else {
+            const bld = findBuild(hit.object)
+            if (bld) { buildHit = bld; dmgDealt = def.damage }
             this.impact(hit.point, 0xffe08a)
             this.particles?.emit(hit.point, 4, { color: [1, 0.85, 0.4], speed: 4, size: 0.35, life: 0.22 })
           }
@@ -180,7 +193,7 @@ export class Weapons {
 
     if (!def.melee) this.flash(start, 0xffd24a)
     if (this.ammo <= 0) this.startReload()
-    return { fired: true, hit: hitEnemy, killed, barrel, playerHit, headshot, dmg: dmgDealt, hitPos }
+    return { fired: true, hit: hitEnemy, killed, barrel, playerHit, headshot, dmg: dmgDealt, hitPos, buildHit }
   }
 
   // ---- Public combat FX (player weapon + enemies) ------------------------
@@ -248,6 +261,15 @@ function findBarrel(obj) {
   let o = obj
   while (o) {
     if (o.userData && o.userData.barrel && o.userData.barrel.alive) return o.userData.barrel
+    o = o.parent
+  }
+  return null
+}
+
+function findBuild(obj) {
+  let o = obj
+  while (o) {
+    if (o.userData && o.userData.build && !o.userData.build._dead) return o.userData.build
     o = o.parent
   }
   return null
