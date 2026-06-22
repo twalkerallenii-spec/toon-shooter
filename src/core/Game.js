@@ -73,6 +73,7 @@ const WEAPON_SHOP = [
   { i: 21, label: 'Hyperbeam', ico: '🟦', price: 2500000 },
   { i: 22, label: 'Apocalypse', ico: '🟥', price: 3500000 },
   { i: 23, label: 'Omega Annihilator', ico: '⚪', price: 5000000 },
+  { i: 24, label: 'WORLD ANNIHILATOR', ico: '🌍', price: 10000000 }, // deletes everything
 ]
 
 export class Game {
@@ -1200,7 +1201,7 @@ export class Game {
     if (text.toLowerCase() === '/arsenal') {
       if (!this.isAdmin && this.net) { this.hud.addChat('System', 'Only the host can use /arsenal.', { self: true }); return }
       if (this.state !== STATE.PLAYING) { this.hud.addChat('System', 'Start a match first, then /arsenal.', { self: true }); return }
-      const GOD = ['SuperGun', 'Plasma', 'Ion', 'Void', 'Nova', 'Singular', 'Antimat', 'Quasar', 'Hyper', 'Apoc', 'Omega']
+      const GOD = ['SuperGun', 'Plasma', 'Ion', 'Void', 'Nova', 'Singular', 'Antimat', 'Quasar', 'Hyper', 'Apoc', 'Omega', 'WorldEnd']
       for (const key of GOD) { const i = this.weapons.defs.findIndex((d) => d.key === key); if (i >= 0) this.weapons.give(i) }
       this.hud.setOwned(this.weapons.owned)
       this.hud.addChat('System', '☠ ADMIN ARSENAL granted — all god-tier weapons equipped!', { self: true })
@@ -1994,7 +1995,7 @@ export class Game {
           }))
         }
         // Super Gun: a huge blue energy blast.
-        if (res.projectile === 'energy') this._fireEnergy(res.origin.clone(), res.dir.clone())
+        if (res.projectile === 'energy') this._fireGodWeapon(res.origin.clone(), res.dir.clone(), this.weapons.def.energyMode || 'orb')
         // Broadcast the shot so other players see a tracer.
         if (this.net) {
           const aim = this.player.getAimRay()
@@ -2384,6 +2385,137 @@ export class Game {
       },
     }
     this.grenades.push(blast)
+  }
+
+  // Unified list of everything killable, with a kill() that one-shots it.
+  _godTargets() {
+    const list = []
+    for (const b of this.bots) if (b.alive) list.push({ pos: b.position, kill: () => b.applyDamage?.(1e9, null) })
+    for (const e of this.spawner.enemies) if (e.alive) list.push({ pos: e.group.position, kill: () => { if (e.takeHit(1e9)) { this.score += 10; this.hud.setScore(this.score) } } })
+    if (this.net) for (const rp of this.remotePlayers.values()) list.push({ pos: rp.group.position, kill: () => this.net.sendHit(rp.id, 1e9) })
+    return list
+  }
+
+  _rgb(col) { const c = new THREE.Color(col); return [c.r, c.g, c.b] }
+
+  // Dispatch each god-tier weapon to its OWN effect.
+  _fireGodWeapon(origin, dir, mode) {
+    const col = this.weapons.def?.energyColor || 0x44aaff
+    const flat = new THREE.Vector3(dir.x, 0, dir.z); if (flat.lengthSq() < 1e-4) flat.set(0, 0, 1); else flat.normalize()
+    switch (mode) {
+      case 'spread': for (let i = -1; i <= 1; i++) { const d = dir.clone(); d.x += i * 0.13; d.normalize(); this._fireEnergy(origin.clone(), d) } return
+      case 'chain': return this._godChain(origin, col)
+      case 'blackhole': return this._godWell(flat, col, 12, 1.4)
+      case 'well': return this._godWell(flat, col, 18, 3.2)
+      case 'nova': return this._godNova(col, 28)
+      case 'omega': return this._godNova(col, 75)
+      case 'rail': return this._godRail(origin, dir, col)
+      case 'beam': return this._godBeam(origin, dir, col)
+      case 'meteor': return this._godMeteor(this.player.position.clone().addScaledVector(flat, 20), 8, 24, col)
+      case 'storm': return this._godMeteor(new THREE.Vector3(0, 0, 0), 24, this.world.arenaRadius, col)
+      case 'worldend': return this._godWorldEnd(col)
+      default: return this._fireEnergy(origin, dir)
+    }
+  }
+
+  // Delayed one-shot explosion (used by meteor storms / world end).
+  _delayBlast(pos, radius, col, delay) {
+    const game = this; let t = 0
+    this.grenades.push({ update(dt) { t += dt; if (t >= delay) { game.explodeAt(pos, { radius, damage: 1e9, energy: true }); return true } return false }, dispose() {} })
+  }
+
+  // Ion Storm: chain lightning that arcs between the nearest foes and zaps them.
+  _godChain(origin, col) {
+    const pp = this.player.position
+    const near = this._godTargets().map((t) => ({ t, d: t.pos.distanceTo(pp) })).filter((o) => o.d < 90).sort((a, b) => a.d - b.d).slice(0, 8)
+    let from = origin.clone()
+    for (const { t } of near) {
+      this.weapons.beam(from, t.pos.clone(), col); this.weapons.beam(from, t.pos.clone(), 0xffffff)
+      this.particles.emit(t.pos, 14, { color: this._rgb(col), speed: 8, spread: 2, size: 1.0, life: 0.4 })
+      t.kill(); from = t.pos.clone()
+    }
+    this.audio?.hit?.(); if (!near.length) this.audio?.shoot?.('Pistol')
+  }
+
+  // Antimatter Rifle: instant railgun line — deletes everything along the beam.
+  _godRail(origin, dir, col) {
+    const end = origin.clone().addScaledVector(dir, 500)
+    this.weapons.beam(origin, end, col); this.weapons.beam(origin, end, 0xffffff)
+    for (const t of this._godTargets()) {
+      const v = t.pos.clone().sub(origin); const proj = v.dot(dir); if (proj < 0) continue
+      const closest = origin.clone().addScaledVector(dir, proj)
+      if (closest.distanceTo(t.pos) < 5) { t.kill(); this.particles.emit(t.pos, 12, { color: this._rgb(col), speed: 7, spread: 2, size: 0.9, life: 0.4 }) }
+    }
+    this._shake = Math.max(this._shake || 0, 0.5)
+  }
+
+  // Hyperbeam: wide cone in front instantly vaporises foes.
+  _godBeam(origin, dir, col) {
+    const range = 80
+    for (const t of this._godTargets()) {
+      const v = t.pos.clone().sub(this.player.position); const dist = v.length(); if (dist > range || dist < 0.1) continue
+      if (v.normalize().dot(dir) > 0.8) { t.kill(); this.particles.emit(t.pos, 12, { color: this._rgb(col), speed: 7, spread: 2, size: 0.9, life: 0.4 }) }
+    }
+    for (let i = -3; i <= 3; i++) { const d = dir.clone(); d.x += i * 0.06; d.y += (i % 2) * 0.02; d.normalize(); this.weapons.beam(origin, origin.clone().addScaledVector(d, range), col) }
+    this._shake = Math.max(this._shake || 0, 0.6)
+  }
+
+  // Nova Blaster / Omega: instant shockwave centred on you + expanding ring.
+  _godNova(col, radius) {
+    const c = this.player.position.clone(); c.y += 1
+    this.explodeAt(c, { radius, damage: 1e9, energy: true })
+    this._shake = Math.max(this._shake || 0, Math.min(1.5, 0.5 + radius / 80))
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.5, 8, 40), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthWrite: false }))
+    ring.rotation.x = Math.PI / 2; ring.position.copy(c); this.world.scene.add(ring)
+    let t = 0
+    this.grenades.push({ update(dt) { t += dt; const s = 1 + (radius) * (t / 0.5); ring.scale.set(s, s, s); ring.material.opacity = Math.max(0, 0.8 * (1 - t / 0.5)); return t >= 0.5 }, dispose() {}, })
+    // ring self-cleans on the same frame it finishes via dispose below
+    const game = this
+    setTimeout(() => { if (ring.parent) game.world.scene.remove(ring); ring.geometry.dispose(); ring.material.dispose() }, 600)
+  }
+
+  // Void Ripper / Singularity: a black hole that drags foes in, then implodes.
+  _godWell(flat, col, radius, life) {
+    const center = this.player.position.clone().addScaledVector(flat, 18); center.y = 1.5
+    const grp = new THREE.Group()
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 16), new THREE.MeshBasicMaterial({ color: 0x000000 })))
+    grp.add(new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 16), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.12, depthWrite: false })))
+    grp.position.copy(center); this.world.scene.add(grp)
+    const game = this; let t = 0
+    this.grenades.push({
+      dispose() { if (grp.parent) grp.parent.remove(grp); grp.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() }) },
+      update(dt) {
+        t += dt; grp.rotation.y += dt * 5
+        for (const b of game.bots) { if (!b.alive) continue; const d = Math.hypot(b.position.x - center.x, b.position.z - center.z); if (d < radius) { b.position.x += (center.x - b.position.x) * 0.06; b.position.z += (center.z - b.position.z) * 0.06; if (d < 3.5) b.applyDamage?.(1e9, null) } }
+        for (const e of game.spawner.enemies) { if (!e.alive) continue; const gp = e.group.position; const d = Math.hypot(gp.x - center.x, gp.z - center.z); if (d < radius) { gp.x += (center.x - gp.x) * 0.06; gp.z += (center.z - gp.z) * 0.06; if (d < 3.5 && e.takeHit(1e9)) { game.score += 10; game.hud.setScore(game.score) } } }
+        if (game.net) for (const rp of game.remotePlayers.values()) { const gp = rp.group.position; if (Math.hypot(gp.x - center.x, gp.z - center.z) < 4) game.net.sendHit(rp.id, 1e9) }
+        game.particles.emit(center, 5, { color: game._rgb(col), speed: 3, spread: radius * 0.4, size: 1.4, life: 0.35, drag: 5 })
+        if (t >= life) { game.explodeAt(center, { radius, damage: 1e9, energy: true }); this.dispose(); return true }
+        return false
+      },
+    })
+  }
+
+  // Quasar (local) / Apocalypse (map-wide): a barrage of staggered meteor blasts.
+  _godMeteor(center, count, spread, col) {
+    this.hud.showKillBanner('☄ METEOR STORM')
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * spread
+      const pos = new THREE.Vector3(center.x + Math.cos(a) * r, 1, center.z + Math.sin(a) * r)
+      this._delayBlast(pos, 12, col, Math.random() * 0.9)
+    }
+    this._shake = Math.max(this._shake || 0, 0.7)
+  }
+
+  // World Annihilator: deletes EVERYTHING on the map at once.
+  _godWorldEnd(col) {
+    for (const t of this._godTargets()) t.kill()
+    if (this._builds) for (const rec of [...this._builds]) this._removeBuild(rec)
+    const R = this.world.arenaRadius
+    for (let i = 0; i < 36; i++) { const a = Math.random() * Math.PI * 2, r = Math.random() * R; this._delayBlast(new THREE.Vector3(Math.cos(a) * r, 1, Math.sin(a) * r), 16, col, Math.random() * 1.4) }
+    this._shake = Math.max(this._shake || 0, 1.6)
+    this.hud.showKillBanner('🌍 WORLD ANNIHILATED')
+    this.audio?.explosion?.()
   }
 
   // ---- Pings & Sprays ----
