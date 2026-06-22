@@ -41,10 +41,11 @@ const SOLO_MODES = {
   gungame: { label: 'GUN GAME', bots: 6, role: 'fighter', gungame: true, killTarget: 15, startWeapon: 0, map: 'outpost' },
   oitc: { label: 'ONE IN THE CHAMBER', bots: 6, role: 'fighter', killTarget: 10, lowHp: true, startWeapon: 0, map: 'arena' },
   jugg: { label: 'JUGGERNAUT', jugg: true, map: 'outpost' },
-  infect: { label: 'INFECTION', infect: true, bots: 9, startZombies: 3, map: 'outpost' },
+  infect: { label: 'INFECTION', infect: true, bots: 0, startZombies: 0, map: 'outpost' }, // players only — one zombie
   koth: { label: 'KING OF THE HILL', koth: true, bots: 7, role: 'fighter', map: 'arena' },
   dom: { label: 'DOMINATION', dom: true, bots: 8, role: 'fighter', map: 'outpost' },
   snd: { label: 'SEARCH & DESTROY', snd: true, bots: 6, role: 'fighter', oneLife: true, map: 'outpost' },
+  disaster: { label: 'NATURAL DISASTERS', disaster: true, bots: 0, map: 'outpost' }, // build a fort, survive 30 disasters
 }
 
 // Weapons buyable in the Armory (index = position in the WEAPONS roster). Bought
@@ -77,13 +78,50 @@ const WEAPON_SHOP = [
 ]
 
 // Grenade arsenal — cycle with H, throw with G.
+// Hand grenades bounce + detonate on a fuse (never on impact — only gun-fired
+// projectiles like the GL/RPG explode on contact).
 const NADE_TYPES = [
-  { name: 'Frag', fn: '_nadeFrag', fuse: 2.2, impact: true, speed: 22 },
-  { name: 'Sticky Bomb', fn: '_nadeSticky', fuse: 1.2, impact: true, speed: 24 },
-  { name: 'Cluster', fn: '_nadeCluster', fuse: 2.0, impact: true, speed: 20 },
+  { name: 'Frag', fn: '_nadeFrag', fuse: 2.2, impact: false, speed: 22 },
+  { name: 'Sticky Bomb', fn: '_nadeSticky', fuse: 1.6, impact: false, speed: 24 },
+  { name: 'Cluster', fn: '_nadeCluster', fuse: 2.0, impact: false, speed: 20 },
   { name: 'Smoke', fn: '_nadeSmoke', fuse: 1.4, impact: false, speed: 18 },
   { name: 'Flashbang', fn: '_nadeFlash', fuse: 1.4, impact: false, speed: 18 },
   { name: 'Boogie Bomb', fn: '_nadeBoogie', fuse: 1.4, impact: false, speed: 18 },
+]
+
+// 30 natural disasters (one strikes every 2:00 in Disaster mode). Each maps to an
+// effect "kind" with params; build forts + grab high ground to survive.
+const DISASTERS = [
+  { n: 'Meteor Shower', i: '☄️', k: 'meteor', p: { count: 10 } },
+  { n: 'Earthquake', i: '🫨', k: 'quake', p: {} },
+  { n: 'Tornado', i: '🌪️', k: 'tornado', p: {} },
+  { n: 'Flood', i: '🌊', k: 'flood', p: { h: 2.2 } },
+  { n: 'Tsunami', i: '🌊', k: 'flood', p: { h: 3.4 } },
+  { n: 'Lightning Storm', i: '⚡', k: 'lightning', p: { strikes: 8 } },
+  { n: 'Volcanic Eruption', i: '🌋', k: 'meteor', p: { count: 14, col: 0xff5a00 } },
+  { n: 'Wildfire', i: '🔥', k: 'fire', p: {} },
+  { n: 'Hurricane', i: '🌀', k: 'wind', p: { force: 16 } },
+  { n: 'Hailstorm', i: '🧊', k: 'meteor', p: { count: 18, radius: 4, col: 0x9fd0ff } },
+  { n: 'Acid Rain', i: '🧪', k: 'fire', p: { col: 0x88ff00, dps: 12 } },
+  { n: 'Sinkhole', i: '🕳️', k: 'nova', p: { radius: 30 } },
+  { n: 'Blizzard', i: '❄️', k: 'freeze', p: {} },
+  { n: 'Sandstorm', i: '🏜️', k: 'wind', p: { force: 10, blind: true } },
+  { n: 'Asteroid Impact', i: '💥', k: 'asteroid', p: {} },
+  { n: 'Solar Flare', i: '🌞', k: 'flash', p: {} },
+  { n: 'Supernova', i: '✨', k: 'nova', p: { radius: 65 } },
+  { n: 'Black Hole', i: '⚫', k: 'tornado', p: { pull: 60, kill: true } },
+  { n: 'Plague Cloud', i: '☣️', k: 'fire', p: { col: 0x66ff66, dps: 10 } },
+  { n: 'Avalanche', i: '🏔️', k: 'wind', p: { force: 22 } },
+  { n: 'Firestorm', i: '🔥', k: 'meteor', p: { count: 16, col: 0xff3000 } },
+  { n: 'Ice Age', i: '🧊', k: 'freeze', p: { dur: 8 } },
+  { n: 'Magnetic Storm', i: '🧲', k: 'lightning', p: { strikes: 12 } },
+  { n: 'Gas Explosions', i: '💨', k: 'meteor', p: { count: 8, radius: 10 } },
+  { n: 'Cyclone', i: '🌬️', k: 'tornado', p: {} },
+  { n: 'Heat Wave', i: '🥵', k: 'fire', p: { col: 0xff8800, dps: 8, mapwide: true } },
+  { n: 'Rockslide', i: '🪨', k: 'meteor', p: { count: 20, radius: 3 } },
+  { n: 'Thunderstorm', i: '🌩️', k: 'lightning', p: { strikes: 10 } },
+  { n: 'Mega Quake', i: '🌍', k: 'quake', p: { dur: 6, dmg: 18 } },
+  { n: 'APOCALYPSE', i: '☠️', k: 'apocalypse', p: {} },
 ]
 
 export class Game {
@@ -867,6 +905,11 @@ export class Game {
     this.hud.setZombie?.(false)
     this.kothMode = !!this.modeCfg?.koth
     this.kothYou = 0; this.kothEnemy = 0
+    this.disasterMode = !!this.modeCfg?.disaster
+    this._disasterT = this.disasterMode ? 120 : 0 // 2:00 until first disaster
+    this._disasterN = 0 // how many survived
+    this._disasterPending = null
+    this._roleShown = false // infection role reveal spinner shows once
     this.hillRadius = 8
     this.domMode = !!this.modeCfg?.dom
     this.domYou = 0; this.domEnemy = 0; this._domPoints = []
@@ -1220,6 +1263,15 @@ export class Game {
       for (const key of GOD) { const i = this.weapons.defs.findIndex((d) => d.key === key); if (i >= 0) this.weapons.give(i) }
       this.hud.setOwned(this.weapons.owned)
       this.hud.addChat('System', '☠ ADMIN ARSENAL granted — all god-tier weapons equipped!', { self: true })
+      return
+    }
+    // Admin/host: /add [n] spawns AI bots into the match (up to 12 at a time).
+    if (text.toLowerCase().startsWith('/add')) {
+      if (!this.isAdmin && this.net) { this.hud.addChat('System', 'Only the host can use /add.', { self: true }); return }
+      if (this.state !== STATE.PLAYING) { this.hud.addChat('System', 'Start a match first, then /add.', { self: true }); return }
+      const n = Math.max(1, Math.min(12, parseInt(text.split(/\s+/)[1], 10) || 1))
+      this._spawnBots(n, 'fighter')
+      this.hud.addChat('System', `🤖 Added ${n} AI bot${n > 1 ? 's' : ''}.`, { self: true })
       return
     }
     if (this.net) this.net.sendChat(text)
@@ -2065,6 +2117,11 @@ export class Game {
     }
 
     // Solo combat modes (FFA / Gun Game / OITC / Juggernaut / Infection).
+    // Infection role reveal (random) on the first frame of the match.
+    if (this.infectMode && !this._roleShown) { this._roleShown = true; this._rollZombieRole() }
+    // Natural Disasters mode.
+    if (this.disasterMode) this._updateDisasters(dt)
+
     if (this.modeCfg && !this._matchOver) {
       const cfg = this.modeCfg
       if (cfg.survive != null) {
@@ -2143,16 +2200,17 @@ export class Game {
           }
         }
       } else if (cfg.infect) {
+        // Players-only infection (no AI). Other players are counted via the relay.
         this._matchT = (this._matchT || 0) + dt
-        const humanBots = this.bots.filter((b) => b.alive && b.role === 'fighter').length
+        const remotes = this.net ? this.remotePlayers.size : 0
+        const opponents = this.bots.filter((b) => b.alive).length + remotes
         const zombies = this.bots.filter((b) => b.alive && b.role === 'zombie').length + (this.playerZombie ? 1 : 0)
-        const humans = humanBots + (this.playerZombie ? 0 : 1)
-        this.hud.setStormTimer(`🧟 INFECTION   Survivors: ${humans}   Zombies: ${zombies}`)
-        // Grace period so the match can't resolve before everyone has spawned in.
-        if (this._matchT > 4) {
+        const humans = this.bots.filter((b) => b.alive && b.role === 'fighter').length + remotes + (this.playerZombie ? 0 : 1)
+        this.hud.setStormTimer(`🧟 INFECTION   You: ${this.playerZombie ? 'ZOMBIE 🧟' : 'INNOCENT 😇'}   Survivors: ${humans}   Zombies: ${zombies}`)
+        // Only resolve once there are real opponents (else solo is a free sandbox).
+        if (this._matchT > 4 && opponents > 0) {
           if (zombies === 0) { this._matchOver = true; this._winMatch('SURVIVORS WIN', 'Every zombie was eliminated!', !this.playerZombie) }
           else if (humans === 0) { this._matchOver = true; this._winMatch('INFECTION COMPLETE', 'Everyone was turned.', false) }
-          else if (humans === 1) { this._matchOver = true; const won = !this.playerZombie; this._winMatch(won ? 'LAST SURVIVOR' : 'INFECTED', won ? 'You were the last one standing!' : 'A survivor outlasted you.', won) }
         }
       }
     }
@@ -2846,6 +2904,189 @@ export class Game {
     el.style.transition = 'none'; el.style.opacity = String(Math.min(1, intensity))
     void el.offsetWidth
     el.style.transition = 'opacity 1.6s ease-out'; el.style.opacity = '0'
+  }
+
+  // ---- Role reveal (Infection): a spinning tag that lands on a RANDOM role ----
+  _rollZombieRole() {
+    const zombie = Math.random() < 0.5 // random per request
+    this._showRoleSpinner(zombie ? 'zombie' : 'innocent')
+    if (zombie) this._infectPlayer()
+  }
+
+  _showRoleSpinner(role) {
+    let el = document.getElementById('role-spinner')
+    if (!el) { el = document.createElement('div'); el.id = 'role-spinner'; document.body.appendChild(el) }
+    el.style.display = 'flex'; el.classList.add('spinning'); el.classList.remove('zombie', 'innocent')
+    const words = ['ZOMBIE', 'INNOCENT', 'INNOCENT', 'ZOMBIE', 'INNOCENT']
+    let i = 0, spins = 0
+    clearInterval(this._roleIv)
+    this._roleIv = setInterval(() => {
+      el.textContent = words[i++ % words.length]; spins++
+      if (spins > 24) {
+        clearInterval(this._roleIv)
+        el.classList.remove('spinning')
+        el.textContent = role === 'zombie' ? '🧟 YOU ARE THE ZOMBIE' : '😇 INNOCENT'
+        el.classList.add(role === 'zombie' ? 'zombie' : 'innocent')
+        setTimeout(() => { el.style.display = 'none' }, 2400)
+      }
+    }, 85)
+  }
+
+  // ---- Natural Disasters mode ----
+  _updateDisasters(dt) {
+    if (!this.disasterMode || this._matchOver) return
+    if (this._disasterPending) {
+      this._disasterPending.t -= dt
+      if (this._disasterPending.t <= 0) {
+        const d = this._disasterPending.d; this._disasterPending = null
+        this._runDisaster(d); this._disasterN++; this._disasterT = 120
+        this._dropRelief() // recovery loot so survival is sustainable
+        this.hud.addKillFeed?.(`✅ Survived ${this._disasterN} — relief supplies dropped!`)
+      } else {
+        this.hud.setStormTimer(`⚠️ ${this._disasterPending.d.i} ${this._disasterPending.d.n} INCOMING — ${Math.ceil(this._disasterPending.t)}`)
+      }
+      return
+    }
+    this._disasterT -= dt
+    const tt = Math.max(0, this._disasterT), mm = Math.floor(tt / 60), ss = String(Math.floor(tt % 60)).padStart(2, '0')
+    this.hud.setStormTimer(`🌪️ Survived: ${this._disasterN}  ·  Next disaster ${mm}:${ss}  ·  build a fort (B)!`)
+    if (this._disasterT <= 0) {
+      const d = DISASTERS[Math.floor(Math.random() * DISASTERS.length)]
+      this._disasterPending = { d, t: 4 }
+      this.hud.showKillBanner(`${d.i} ${d.n.toUpperCase()} INCOMING!`)
+      this.audio?.explosion?.()
+    }
+  }
+
+  _runDisaster(d) {
+    this.hud.showKillBanner(`${d.i} ${d.n.toUpperCase()}`)
+    const p = d.p || {}
+    switch (d.k) {
+      case 'meteor': return this._disMeteor(p.count || 10, p.radius || 7, p.col || 0xff7a30)
+      case 'quake': return this._disQuake(p.dur || 4, p.dmg || 12)
+      case 'tornado': return this._disTornado(!!p.kill)
+      case 'flood': return this._disFlood(p.h || 2.2)
+      case 'lightning': return this._disLightning(p.strikes || 8)
+      case 'fire': return this._disFire(p.col || 0xff5a00, p.dps || 14, !!p.mapwide)
+      case 'wind': return this._disWind(p.force || 16, !!p.blind)
+      case 'nova': return this._disNova(p.radius || 35)
+      case 'freeze': return this._disFreeze(p.dur || 6)
+      case 'asteroid': return this._disAsteroid()
+      case 'flash': this._flashScreen(0.9); this._shake = Math.max(this._shake || 0, 0.4); return
+      case 'apocalypse': this._disMeteor(20, 8, 0xff3000); this._disQuake(6, 16); this._disNova(50); return
+    }
+  }
+
+  // Telegraphed ground blast that hurts the player.
+  _disasterBlast(pos, radius, delay, col) {
+    const game = this; let t = 0
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.9, 0.4, 6, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, depthWrite: false }))
+    ring.rotation.x = Math.PI / 2; ring.position.set(pos.x, 0.1, pos.z); this.world.scene.add(ring)
+    this.grenades.push({
+      dispose() { if (ring.parent) game.world.scene.remove(ring); ring.geometry.dispose(); ring.material.dispose() },
+      update(dt) { t += dt; ring.material.opacity = 0.3 + 0.5 * Math.abs(Math.sin(t * 10)); if (t >= delay) { game.explodeAt(new THREE.Vector3(pos.x, 0.5, pos.z), { radius, damage: 120 }); this.dispose(); return true } return false },
+    })
+  }
+
+  _disMeteor(count, radius, col) {
+    const R = this.world.arenaRadius
+    for (let i = 0; i < count; i++) { const a = Math.random() * Math.PI * 2, r = Math.random() * R * 0.95; this._disasterBlast(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), radius, 0.6 + Math.random() * 2, col) }
+  }
+
+  _disQuake(dur, dmg) {
+    const game = this; let t = 0, tick = 0
+    this.grenades.push({ update(dt) { t += dt; game._shake = Math.max(game._shake || 0, 0.6); tick -= dt; if (tick <= 0) { tick = 0.5; if (game.player.alive && game.player.position.y < 1.6) game.player.takeDamage(dmg * 0.5) } return t >= dur }, dispose() {} })
+  }
+
+  _disFlood(h) {
+    const game = this; let t = 0, tick = 0; const dur = 8
+    const span = game.world.arenaRadius * 2.2
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(span, span), new THREE.MeshStandardMaterial({ color: 0x2a6cff, transparent: true, opacity: 0.55, depthWrite: false }))
+    plane.rotation.x = -Math.PI / 2; plane.position.y = 0.05; this.world.scene.add(plane)
+    this.grenades.push({
+      dispose() { if (plane.parent) game.world.scene.remove(plane); plane.geometry.dispose(); plane.material.dispose() },
+      update(dt) { t += dt; const rise = Math.min(h, h * (t / 2)); plane.position.y = rise; tick -= dt; if (tick <= 0) { tick = 0.5; if (game.player.alive && game.player.position.y < rise + 0.2) game.player.takeDamage(10) } if (t >= dur) { this.dispose(); return true } return false },
+    })
+  }
+
+  _disLightning(strikes) {
+    const game = this; let n = 0, t = 0
+    this.grenades.push({ update(dt) { t += dt; if (t >= 0.4) { t = 0; n++; const pp = game.player.position; const a = Math.random() * Math.PI * 2, r = Math.random() * 18; game._disasterBlast(new THREE.Vector3(pp.x + Math.cos(a) * r, 0, pp.z + Math.sin(a) * r), 6, 0.5, 0x9fe7ff) } return n >= strikes }, dispose() {} })
+  }
+
+  _disTornado(kill) {
+    const game = this; let t = 0; const dur = 9
+    const c = new THREE.Vector3((Math.random() - 0.5) * game.world.arenaRadius, 0, (Math.random() - 0.5) * game.world.arenaRadius)
+    const grp = new THREE.Group()
+    grp.add(new THREE.Mesh(new THREE.ConeGeometry(5, 16, 16, 1, true), new THREE.MeshBasicMaterial({ color: kill ? 0x110022 : 0x888899, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })))
+    grp.children[0].position.y = 8; grp.position.copy(c); this.world.scene.add(grp)
+    this.grenades.push({
+      dispose() { if (grp.parent) game.world.scene.remove(grp); grp.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() }) },
+      update(dt) {
+        t += dt; grp.rotation.y += dt * 6
+        c.x += Math.sin(t * 0.7) * 8 * dt; c.z += Math.cos(t * 0.9) * 8 * dt; game.world.clampToArena(c); grp.position.set(c.x, 0, c.z)
+        const pp = game.player.position, dx = c.x - pp.x, dz = c.z - pp.z, d = Math.hypot(dx, dz)
+        if (d < 14 && game.player.alive) { const k = 1 - d / 14; pp.x += dx * k * 0.04; pp.z += dz * k * 0.04; if (d < 4) game.player.takeDamage(kill ? 50 : 18 * dt) }
+        game.particles.emit({ x: c.x + (Math.random() - 0.5) * 8, y: Math.random() * 12, z: c.z + (Math.random() - 0.5) * 8 }, 3, { color: kill ? [0.3, 0.1, 0.4] : [0.6, 0.6, 0.7], speed: 4, spread: 3, size: 1.6, life: 0.5, up: 6 })
+        return t >= dur
+      },
+    })
+  }
+
+  _disFire(col, dps, mapwide) {
+    const game = this; let t = 0, tick = 0; const dur = 8
+    const R = game.world.arenaRadius
+    const zones = []
+    const count = mapwide ? 1 : 6
+    for (let i = 0; i < count; i++) zones.push(mapwide ? { x: 0, z: 0, r: R } : { x: (Math.random() - 0.5) * R * 1.6, z: (Math.random() - 0.5) * R * 1.6, r: 8 + Math.random() * 6 })
+    this.grenades.push({
+      dispose() {},
+      update(dt) {
+        t += dt; tick -= dt
+        for (const z of zones) for (let k = 0; k < (mapwide ? 6 : 2); k++) game.particles.emit({ x: z.x + (Math.random() - 0.5) * z.r * 2, y: 0.4 + Math.random() * 1.5, z: z.z + (Math.random() - 0.5) * z.r * 2 }, 2, { color: game._rgb(col), speed: 2, spread: 1.5, size: 1.4, life: 0.5, up: 3 })
+        if (tick <= 0) { tick = 0.5; const pp = game.player.position; for (const z of zones) { if (Math.hypot(pp.x - z.x, pp.z - z.z) < z.r) { if (game.player.alive) game.player.takeDamage(dps * 0.5); break } } }
+        return t >= dur
+      },
+    })
+  }
+
+  _disWind(force, blind) {
+    const game = this; let t = 0; const dur = 6
+    const a = Math.random() * Math.PI * 2, dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+    if (blind) this._flashScreen(0.5)
+    this.grenades.push({ update(dt) { t += dt; if (game.player.alive) { game.player.position.x += dir.x * force * dt; game.player.position.z += dir.z * force * dt; game.world.clampToArena(game.player.position) } game.particles.emit({ x: game.player.position.x - dir.x * 6, y: 1 + Math.random() * 2, z: game.player.position.z - dir.z * 6 }, 3, { color: [0.8, 0.78, 0.7], speed: force, spread: 2, size: 1.2, life: 0.4 }); return t >= dur }, dispose() {} })
+  }
+
+  _disNova(radius) {
+    const game = this; let t = 0; const dur = 1.6, speed = radius / dur
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 1.0, 8, 48), new THREE.MeshBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.7, depthWrite: false }))
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.5; this.world.scene.add(ring)
+    let hit = false
+    this.grenades.push({
+      dispose() { if (ring.parent) game.world.scene.remove(ring); ring.geometry.dispose(); ring.material.dispose() },
+      update(dt) { t += dt; const rad = speed * t; ring.scale.set(rad, rad, rad); ring.material.opacity = Math.max(0, 0.7 * (1 - t / dur)); if (!hit && game.player.alive) { const pd = Math.hypot(game.player.position.x, game.player.position.z); if (Math.abs(pd - rad) < 4) { hit = true; game.player.takeDamage(45); game._shake = Math.max(game._shake || 0, 0.7) } } if (t >= dur) { this.dispose(); return true } return false },
+    })
+  }
+
+  _disFreeze(dur) {
+    const game = this; let t = 0, tick = 0
+    this._flashScreen(0.25)
+    this.grenades.push({ update(dt) { t += dt; tick -= dt; if (tick <= 0) { tick = 0.6; if (game.player.alive) game.player.takeDamage(6) } game.particles.emit({ x: game.player.position.x + (Math.random() - 0.5) * 4, y: 1 + Math.random() * 2, z: game.player.position.z + (Math.random() - 0.5) * 4 }, 2, { color: [0.7, 0.9, 1], speed: 1, spread: 1, size: 0.8, life: 0.6, up: 1 }); return t >= dur }, dispose() {} })
+  }
+
+  _disAsteroid() {
+    const R = this.world.arenaRadius, a = Math.random() * Math.PI * 2, r = Math.random() * R * 0.6
+    this._disasterBlast(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), 26, 2.5, 0xff3000)
+    this._shake = Math.max(this._shake || 0, 1.2)
+  }
+
+  // Recovery supplies near the player after surviving a disaster.
+  _dropRelief() {
+    const p = this.player.position
+    const near = (t, n) => { for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * 14; this.pickups.spawn(t, p.x + Math.cos(a) * r, p.z + Math.sin(a) * r) } }
+    near('health', 3); near('shield', 2); near('medkit', 1)
+    const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 10
+    this.pickups.spawnChest(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r)
   }
 
   _applySettings() {
