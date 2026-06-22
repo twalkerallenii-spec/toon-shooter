@@ -1000,6 +1000,7 @@ export class Game {
     this._fx = [] // pings/sprays (old ones die with the rebuilt scene)
     this._supplyTimer = 38 // BR supply-drop countdown
     this.buildMode = false; this._builds = []; this._buildGhost = null; this._buildGhostPiece = null
+    this._buildsById = {}; this._buildSeq = 0 // networked-build registry + id counter
     this.pickups.onPickup = (type, wi) => {
       if (type === 'chest') { this._dailyProgress('chests'); return }
       const label = type === 'weapon' ? (this.weapons.defs[wi]?.label || this.weapons.defs[wi]?.key || 'Weapon')
@@ -2686,6 +2687,8 @@ export class Game {
     if (!fx) return
     if (fx.kind === 'ping') this._spawnPing(new THREE.Vector3(fx.x, fx.y, fx.z), '📍', name)
     else if (fx.kind === 'spray') this._spawnSpray(new THREE.Vector3(fx.x, fx.y, fx.z), new THREE.Vector3(fx.nx, fx.ny, fx.nz), fx.e)
+    else if (fx.kind === 'build') { if (!this._buildsById?.[fx.id]) this._spawnBuild(fx.piece, fx.tx, fx.tz, fx.baseY, fx.yaw, !!fx.down, fx.id) }
+    else if (fx.kind === 'buildgone') { const rec = this._buildsById?.[fx.id]; if (rec) this._removeBuild(rec, true) }
   }
 
   _emojiTexture(emoji, px = 128) {
@@ -2827,6 +2830,15 @@ export class Game {
     if (!this.buildMode) return
     const { tx, tz, baseY, yawSnap, down } = this._buildPlacement()
     const piece = this.buildPiece
+    const netId = `${this.net?.id ?? 'me'}_${++this._buildSeq}`
+    this._spawnBuild(piece, tx, tz, baseY, yawSnap, down, netId)
+    this.audio?.pickup?.()
+    // Broadcast so other players SEE / collide with / walk on this build.
+    this.net?.sendFx({ kind: 'build', id: netId, piece, tx, tz, baseY, yaw: yawSnap, down: down ? 1 : 0 })
+  }
+
+  // Create a build with real colliders (used by local placement AND remote sync).
+  _spawnBuild(piece, tx, tz, baseY, yawSnap, down, netId) {
     const obj = this._makePiece(piece, false, down)
     obj.position.set(tx, baseY + obj.userData.localY, tz)
     obj.rotation.y = yawSnap
@@ -2861,11 +2873,12 @@ export class Game {
 
     // Destructible: builds have HP and can be shot or blown up.
     const maxHp = piece === 'floor' ? 150 : piece === 'ramp' ? 120 : 200
-    const rec = { obj, obstacle, plats, hp: maxHp, maxHp, x: tx, y: baseY, z: tz, bar: null }
+    const rec = { obj, obstacle, plats, hp: maxHp, maxHp, x: tx, y: baseY, z: tz, bar: null, netId }
     obj.traverse((o) => { if (o.isMesh) o.userData.build = rec }) // bullets find it
     this._builds.push(rec)
-    this.audio?.pickup?.()
+    if (netId) { this._buildsById = this._buildsById || {}; this._buildsById[netId] = rec }
     this.particles?.emit({ x: tx, y: baseY + 1, z: tz }, 8, { color: [0.5, 0.8, 1], speed: 3, spread: 2, size: 0.8, life: 0.4, up: 2 })
+    return rec
   }
 
   // Damage a placed build; show a health bar; destroy at 0 HP.
@@ -2890,7 +2903,8 @@ export class Game {
     rec.bar.tex.needsUpdate = true
   }
 
-  _removeBuild(rec) {
+  _removeBuild(rec, fromNet = false) {
+    if (rec._dead) return
     rec._dead = true
     this.world.scene.remove(rec.obj)
     rec.obj.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.() })
@@ -2898,6 +2912,9 @@ export class Game {
     for (const pl of rec.plats) { const i = this.world.platforms.indexOf(pl); if (i >= 0) this.world.platforms.splice(i, 1) }
     if (rec.bar) { this.world.scene.remove(rec.bar.spr); rec.bar.tex.dispose() }
     const bi = this._builds.indexOf(rec); if (bi >= 0) this._builds.splice(bi, 1)
+    if (rec.netId && this._buildsById) delete this._buildsById[rec.netId]
+    // Sync the destruction to everyone (unless this removal came from the network).
+    if (!fromNet && rec.netId && this.net) this.net.sendFx({ kind: 'buildgone', id: rec.netId })
     this.audio?.explosion?.()
     this.particles?.emit({ x: rec.x, y: rec.y + 1.5, z: rec.z }, 18, { color: [0.6, 0.75, 1], speed: 7, spread: 2.5, size: 0.7, life: 0.5, up: 2 })
   }
