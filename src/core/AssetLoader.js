@@ -32,7 +32,13 @@ export class AssetLoader {
     try {
       if (!this.meshCache.has(path)) {
         const loader = path.toLowerCase().endsWith('.fbx') ? this.fbx : this.obj
-        this.meshCache.set(path, await loader.loadAsync(path))
+        const root = await loader.loadAsync(path)
+        // FBX/OBJ files often embed lights & cameras — strip them so adding the
+        // model to the scene doesn't flood it with extra lighting (washed colours).
+        const junk = []
+        root.traverse((o) => { if (o.isLight || o.isCamera) junk.push(o) })
+        junk.forEach((o) => o.parent && o.parent.remove(o))
+        this.meshCache.set(path, root)
       }
       const root = this.meshCache.get(path)
       return { scene: root.clone(true), animations: root.animations || [] }
