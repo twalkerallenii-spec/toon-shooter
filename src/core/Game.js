@@ -175,6 +175,7 @@ export class Game {
       const b = e.target.closest('.ch-claim'); if (!b) return
       this._claimDaily(parseInt(b.dataset.ci, 10))
     })
+    document.getElementById('bp-claim')?.addEventListener('click', () => this._claimBattlePass())
 
     // Animated lobby scene behind the menu.
     this._buildLobby()
@@ -469,8 +470,11 @@ export class Game {
       gungame: ['GUN GAME', 'Every kill upgrades your weapon. Master all to win.'],
       oitc: ['ONE IN THE CHAMBER', 'Everyone has 1 HP. One shot, one kill.'],
       jugg: ['JUGGERNAUT', 'Take down the giant juggernaut bot.'],
-      infect: ['INFECTION', 'Zombies are knife-only — get stabbed and you turn. Last human wins.'],
+      infect: ['INFECTION', 'Players only — a spinning tag picks one Zombie. Get stabbed and you turn.'],
       koth: ['KING OF THE HILL', 'Hold the glowing hill at the center. First to 100 wins.'],
+      dom: ['DOMINATION', 'Capture and hold A/B/C points for ticking score.'],
+      snd: ['SEARCH & DESTROY', 'One life — plant or defuse the bomb.'],
+      disaster: ['NATURAL DISASTERS', 'Build a fort and survive a disaster every 2:00. 30 events!'],
     }
     const [label, sub] = info[mode] || info.coop
     this.hud.setLobbyMode(label, sub)
@@ -648,6 +652,7 @@ export class Game {
     s.xp = (s.xp || 0) + (won ? 500 : 200)
     localStorage.setItem('ts_stats', JSON.stringify(s))
     this._dailyProgress('matches'); if (won) this._dailyProgress('wins')
+    this._recordHistory(won)
     // Coins: earn from kills + a win bonus.
     const coinGain = k * 10 + (won ? 100 : 25)
     this._setCoins(this._coins() + coinGain)
@@ -785,6 +790,59 @@ export class Game {
     this._populateLobby()
   }
 
+  // ---- Battle Pass: a reward track tied to your XP tier ----
+  _bpReward(tier) {
+    const WPN = { 10: 1, 15: 2, 20: 3, 25: 8, 30: 7, 40: 4, 50: 13 } // tier -> weapon index
+    if (WPN[tier] != null) { const w = WEAPON_SHOP.find((x) => x.i === WPN[tier]); return { label: w ? w.label : 'Weapon', coins: 200, weapon: WPN[tier] } }
+    if (tier % 5 === 0) return { label: 'Coin Cache', coins: 400 }
+    return { label: 'Coins', coins: 80 + tier * 10 }
+  }
+
+  _bpTier() { return 1 + Math.floor((this._stats().xp || 0) / 500) }
+  _bpClaimed() { return parseInt(localStorage.getItem('ts_bp_claimed') || '0', 10) || 0 }
+
+  _renderBattlePass() {
+    const track = document.getElementById('bp-track'); if (!track) return
+    const tier = this._bpTier(), claimed = this._bpClaimed()
+    let html = ''
+    for (let t = Math.max(1, tier - 1); t < tier + 5; t++) {
+      const r = this._bpReward(t)
+      const cls = t <= claimed ? 'got' : (t <= tier ? 'ready' : '')
+      const ico = r.weapon != null ? '🔫' : r.coins >= 400 ? '💰' : '🪙'
+      html += `<div class="bp-tier ${cls}"><span class="bp-n">${t}</span><span class="bp-r">${ico} ${r.label}</span></div>`
+    }
+    track.innerHTML = html
+    const btn = document.getElementById('bp-claim')
+    if (btn) { const n = Math.max(0, tier - claimed); btn.classList.toggle('hidden', n <= 0); btn.textContent = `CLAIM ${n} REWARD${n > 1 ? 'S' : ''}` }
+  }
+
+  _claimBattlePass() {
+    const tier = this._bpTier(), claimed = this._bpClaimed()
+    if (tier <= claimed) return
+    let coins = 0; const owned = this._ownedWeapons(); const gained = []
+    for (let t = claimed + 1; t <= tier; t++) { const r = this._bpReward(t); coins += r.coins; if (r.weapon != null && !owned.includes(r.weapon)) { owned.push(r.weapon); gained.push(r.label) } }
+    this._setCoins(this._coins() + coins); this._saveOwnedWeapons(owned)
+    localStorage.setItem('ts_bp_claimed', String(tier))
+    this.audio?.pickup?.()
+    this._renderWeaponStore(); this._populateLobby()
+    this.hud.addKillFeed?.(`Battle Pass: +${coins}🪙${gained.length ? ' · unlocked ' + gained.join(', ') : ''}`)
+  }
+
+  // ---- Match history (last 10) ----
+  _recordHistory(won) {
+    let h = []; try { h = JSON.parse(localStorage.getItem('ts_history') || '[]') } catch {}
+    const mode = (this.net ? this.onlineMode : this.soloMode) || 'coop'
+    h.unshift({ m: mode, k: this.kills || this.enemyKills || 0, w: !!won })
+    localStorage.setItem('ts_history', JSON.stringify(h.slice(0, 10)))
+  }
+
+  _renderHistory() {
+    const el = document.getElementById('history-list'); if (!el) return
+    let h = []; try { h = JSON.parse(localStorage.getItem('ts_history') || '[]') } catch {}
+    if (!h.length) { el.innerHTML = '<li class="on-empty">No matches yet</li>'; return }
+    el.innerHTML = h.map((x) => `<li><span class="h-mode">${String(x.m).toUpperCase()}</span><span class="h-k">${x.k} elims</span><span class="h-r ${x.w ? 'win' : 'loss'}">${x.w ? 'WIN' : 'LOSS'}</span></li>`).join('')
+  }
+
   // Fill the lobby panels (level, XP, season, challenges, career, avatar).
   _populateLobby() {
     const $ = (id) => document.getElementById(id)
@@ -832,6 +890,8 @@ export class Game {
       rl.innerHTML = board.map((r, i) =>
         `<li class="${r[2] ? 'me' : ''}"><span class="rk-pos">${i + 1}</span><span class="rk-name">${r[0]}</span><span class="rk-k">${r[1]}</span></li>`).join('')
     }
+    this._renderBattlePass()
+    this._renderHistory()
   }
 
   // Quit from pause → finalize this match and show a recap (kills/XP gained +

@@ -237,6 +237,13 @@
         <div class="sb-tier">TIER <b id="sb-tier">3</b> / 100</div>
       </div>
 
+      <!-- Battle Pass reward track -->
+      <div class="lobby-panel" id="battlepass">
+        <div class="lp-title">BATTLE PASS</div>
+        <div id="bp-track"></div>
+        <button id="bp-claim" class="hidden">CLAIM REWARDS</button>
+      </div>
+
       <!-- Daily challenges -->
       <div class="lobby-panel" id="challenges">
         <div class="lp-title">DAILY CHALLENGES</div>
@@ -252,6 +259,12 @@
           <div><b id="st-matches">0</b><span>Matches</span></div>
           <div><b id="st-kd">0.0</b><span>K/D</span></div>
         </div>
+      </div>
+
+      <!-- Match history (last 10) -->
+      <div class="lobby-panel" id="history">
+        <div class="lp-title">MATCH HISTORY</div>
+        <ul id="history-list"><li class="on-empty">No matches yet</li></ul>
       </div>
 
       <!-- Players online (live presence) -->

@@ -505,6 +505,23 @@ body.touch #rank-btn { display: block; }
 #role-spinner.zombie { color: #7CFF5A; border-color: #7CFF5A; box-shadow: 0 0 40px rgba(124,255,90,0.6); }
 #role-spinner.innocent { color: #6cf0ff; border-color: #6cf0ff; box-shadow: 0 0 40px rgba(108,240,255,0.6); }
 @keyframes rolespin { 0% { transform: translateX(-50%) rotateX(0deg); } 100% { transform: translateX(-50%) rotateX(360deg); } }
+
+/* Battle Pass track */
+#bp-track { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.bp-tier { flex: 0 0 auto; min-width: 64px; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(150,170,255,0.22); text-align: center; }
+.bp-tier .bp-n { display: block; font-weight: 800; font-size: 13px; color: #cfe0ff; }
+.bp-tier .bp-r { display: block; font-size: 9px; opacity: 0.8; margin-top: 2px; }
+.bp-tier.got { opacity: 0.5; border-color: rgba(120,255,120,0.3); }
+.bp-tier.ready { border-color: var(--accent); box-shadow: 0 0 12px rgba(255,176,0,0.35); }
+#bp-claim { margin-top: 8px; width: 100%; padding: 7px; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; color: #1a1206; background: linear-gradient(180deg, #ffe07a, #ffb000); }
+#bp-claim:hover { filter: brightness(1.08); }
+#bp-claim.hidden { display: none; }
+/* Match history */
+#history-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+#history-list li { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+#history-list .h-mode { font-weight: 700; color: #cfe0ff; }
+#history-list .h-r.win { color: #4ade80; font-weight: 800; }
+#history-list .h-r.loss { color: #ff6a6a; font-weight: 800; }
 .howto { font-size: 12px; line-height: 1.45; color: #cdd6f0; max-height: 230px; overflow-y: auto; padding-right: 6px; }
 .howto p { margin: 0 0 7px; }
 .howto b { color: #8fc4ff; }
